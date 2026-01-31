@@ -1,32 +1,55 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import PageLayout from "@/components/layout/PageLayout";
-
-const ADMIN_PASSWORD = "GPS0126";
+import { useAdminAuth } from "@/hooks/useAdminAuth";
 
 const AdminLogin = () => {
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const { signIn, isAdmin, isLoading: authLoading } = useAdminAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-
-    // Case-insensitive password check
-    if (password.toUpperCase() === ADMIN_PASSWORD.toUpperCase()) {
-      localStorage.setItem("gp_admin_unlocked", "true");
-      toast.success("Access granted");
+  // Redirect if already authenticated as admin
+  useEffect(() => {
+    if (!authLoading && isAdmin) {
       navigate("/admin");
-    } else {
-      toast.error("Invalid password");
+    }
+  }, [isAdmin, authLoading, navigate]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!email.trim() || !password.trim()) {
+      toast.error("Please enter both email and password");
+      return;
     }
 
-    setIsLoading(false);
+    setIsLoading(true);
+
+    const { error } = await signIn(email, password);
+
+    if (error) {
+      toast.error(error);
+      setIsLoading(false);
+    } else {
+      toast.success("Access granted");
+      navigate("/admin");
+    }
   };
+
+  if (authLoading) {
+    return (
+      <PageLayout>
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="text-muted-foreground">Loading...</div>
+        </div>
+      </PageLayout>
+    );
+  }
 
   return (
     <PageLayout>
@@ -35,26 +58,36 @@ const AdminLogin = () => {
           <div className="text-center">
             <h1 className="text-2xl font-bold text-foreground">Admin Login</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Enter the admin password to continue
+              Enter your admin credentials to continue
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <Input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="h-14 text-center text-lg bg-secondary border-border rounded-xl"
+              autoFocus
+              autoComplete="email"
+            />
+            
             <Input
               type="password"
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="h-14 text-center text-lg bg-secondary border-border rounded-xl"
-              autoFocus
+              autoComplete="current-password"
             />
 
             <Button
               type="submit"
-              disabled={isLoading || !password}
+              disabled={isLoading || !email || !password}
               className="w-full h-14 text-lg font-semibold rounded-xl"
             >
-              {isLoading ? "Verifying..." : "Enter"}
+              {isLoading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
         </div>
