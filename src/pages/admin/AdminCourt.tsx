@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { ChevronLeft, ChevronDown, ChevronUp, Plus, Trash2, Edit2, Check, X, Info } from "lucide-react";
 import PageLayout from "@/components/layout/PageLayout";
 import { Database } from "@/integrations/supabase/types";
+import { useAdminAuth } from "@/hooks/useAdminAuth";
 
 type Match = Database["public"]["Tables"]["matches"]["Row"];
 
@@ -43,24 +44,23 @@ const AdminCourt = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const courtNumber = parseInt(courtId || "1");
+  const { isAdmin, isLoading: authLoading } = useAdminAuth();
 
   const [newPlayerName, setNewPlayerName] = useState("");
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetPhrase, setResetPhrase] = useState("");
-  const [resetPassword, setResetPassword] = useState("");
   const [playersOpen, setPlayersOpen] = useState(true);
   const [overrideMatchId, setOverrideMatchId] = useState<string | null>(null);
   const [rotationDiagnostics, setRotationDiagnostics] = useState<RotationDiagnostics | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   useEffect(() => {
-    const isAdmin = localStorage.getItem("gp_admin_unlocked") === "true";
-    if (!isAdmin) {
+    if (!authLoading && !isAdmin) {
       navigate("/admin/login");
     }
-  }, [navigate]);
+  }, [authLoading, isAdmin, navigate]);
 
   // Fetch players for this court
   const { data: players = [], isLoading: playersLoading } = useQuery({
@@ -343,7 +343,6 @@ const AdminCourt = () => {
       queryClient.invalidateQueries({ queryKey: ["court_state", courtNumber] });
       setShowResetDialog(false);
       setResetPhrase("");
-      setResetPassword("");
       setPlayersOpen(true);
       toast.success("Court reset successfully");
     },
@@ -358,10 +357,10 @@ const AdminCourt = () => {
 
   const handleResetCourt = () => {
     const expectedPhrase = `RESET COURT ${courtNumber}`;
-    if (resetPhrase.toUpperCase() === expectedPhrase && resetPassword.toUpperCase() === "GPSC010226") {
+    if (resetPhrase.toUpperCase() === expectedPhrase) {
       resetCourt.mutate();
     } else {
-      toast.error("Invalid phrase or password");
+      toast.error("Invalid confirmation phrase");
     }
   };
 
@@ -720,19 +719,12 @@ const AdminCourt = () => {
                   ) : (
                     <div className="space-y-4">
                       <p className="text-sm text-muted-foreground">
-                        Type "RESET COURT {courtNumber}" and enter password to confirm
+                        Type "RESET COURT {courtNumber}" to confirm
                       </p>
                       <Input
                         placeholder={`RESET COURT ${courtNumber}`}
                         value={resetPhrase}
                         onChange={(e) => setResetPhrase(e.target.value)}
-                        className="bg-secondary"
-                      />
-                      <Input
-                        type="password"
-                        placeholder="Password"
-                        value={resetPassword}
-                        onChange={(e) => setResetPassword(e.target.value)}
                         className="bg-secondary"
                       />
                       <div className="flex gap-2">
@@ -741,7 +733,6 @@ const AdminCourt = () => {
                           onClick={() => {
                             setShowResetDialog(false);
                             setResetPhrase("");
-                            setResetPassword("");
                           }}
                           className="flex-1"
                         >
