@@ -70,12 +70,13 @@ const SlotMachineRoadmap = ({
         });
       }
 
-      // Add match bubble
+      // Add match bubble - use status field for completion
+      const isCompleted = match.status === "completed";
       items.push({
         type: "match",
         match,
-        isActive: match.match_index === currentMatchIndex,
-        isPast: match.match_index < currentMatchIndex,
+        isActive: match.match_index === currentMatchIndex && match.status !== "completed",
+        isPast: isCompleted,
       });
 
       previousMatchIndex = match.match_index;

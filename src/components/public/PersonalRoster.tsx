@@ -76,42 +76,38 @@ const PersonalRoster = ({ courtId, players, matches, courtState }: PersonalRoste
       return { text: `You're live on Court ${courtId}.`, type: "playing" };
     }
 
-    // Find next match for player
-    const nextPlayerMatch = playerMatches.find(m => m.match_index > currentMatchIndex);
-    const completedPlayerMatches = playerMatches.filter(m => 
-      m.match_index < currentMatchIndex || (m.match_index === currentMatchIndex && phase === "completed")
-    );
+    // Find next match for player - use status field
+    const nextPlayerMatch = playerMatches.find(m => m.status !== "completed");
+    const completedPlayerMatches = playerMatches.filter(m => m.status === "completed");
 
     // Check if player is done
-    if (!nextPlayerMatch && completedPlayerMatches.length === playerMatches.length) {
+    if (!nextPlayerMatch && completedPlayerMatches.length === playerMatches.length && playerMatches.length > 0) {
       return { text: "You're done for today. Nice work 👏", type: "finished" };
     }
 
     if (!nextPlayerMatch) return null;
 
-    const matchesAway = nextPlayerMatch.match_index - currentMatchIndex;
+    // Count how many uncompleted matches are before the player's next match
+    const uncompletedMatchesBefore = matches.filter(m => 
+      m.status !== "completed" && m.match_index < nextPlayerMatch.match_index
+    ).length;
 
-    if (matchesAway === 1) {
+    if (uncompletedMatchesBefore === 0) {
       return { text: "You're up next. Grab water & be courtside.", type: "next" };
-    } else if (matchesAway === 2) {
+    } else if (uncompletedMatchesBefore === 1) {
       return { text: "You've got time. Stretch or watch the match.", type: "soon" };
     }
 
     return null;
   };
 
-  // Check if player has completed all their matches
+  // Check if player has completed all their matches - use status field
   const hasCompletedAllMatches = useMemo(() => {
-    if (!selectedPlayerId || !courtState || playerMatches.length === 0) return false;
+    if (!selectedPlayerId || playerMatches.length === 0) return false;
     
-    const currentMatchIndex = courtState.current_match_index;
-    const lastPlayerMatch = playerMatches[playerMatches.length - 1];
-    
-    // Player is done if their last match index is less than current, 
-    // or equal to current and phase is not in_progress
-    return lastPlayerMatch.match_index < currentMatchIndex ||
-      (lastPlayerMatch.match_index === currentMatchIndex && courtState.phase !== "in_progress" && courtState.phase !== "idle");
-  }, [selectedPlayerId, courtState, playerMatches]);
+    // Player is done if all their matches have status "completed"
+    return playerMatches.every(m => m.status === "completed");
+  }, [selectedPlayerId, playerMatches]);
 
   // Trigger feedback modal when player completes final match
   useEffect(() => {

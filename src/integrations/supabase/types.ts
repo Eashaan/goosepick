@@ -102,10 +102,14 @@ export type Database = {
       }
       matches: {
         Row: {
+          completed_at: string | null
           court_id: number
           created_at: string
           id: string
           match_index: number
+          override_played: boolean
+          started_at: string | null
+          status: string
           team1_player1_id: string | null
           team1_player2_id: string | null
           team1_score: number | null
@@ -114,10 +118,14 @@ export type Database = {
           team2_score: number | null
         }
         Insert: {
+          completed_at?: string | null
           court_id: number
           created_at?: string
           id?: string
           match_index: number
+          override_played?: boolean
+          started_at?: string | null
+          status?: string
           team1_player1_id?: string | null
           team1_player2_id?: string | null
           team1_score?: number | null
@@ -126,10 +134,14 @@ export type Database = {
           team2_score?: number | null
         }
         Update: {
+          completed_at?: string | null
           court_id?: number
           created_at?: string
           id?: string
           match_index?: number
+          override_played?: boolean
+          started_at?: string | null
+          status?: string
           team1_player1_id?: string | null
           team1_player2_id?: string | null
           team1_score?: number | null
