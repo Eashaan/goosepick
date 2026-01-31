@@ -46,20 +46,26 @@ serve(async (req) => {
       throw new Error(`Invalid player count: ${players?.length || 0}. Must be 8-12 players.`);
     }
 
-    // Generate rotation
-    const matches = generateRotation(players);
+    // Generate rotation with retry logic
+    const result = generateFairRotation(players);
+    
+    if (!result.success) {
+      throw new Error("Failed to generate fair rotation after maximum attempts");
+    }
 
     // Delete existing matches for this court
     await supabase.from("matches").delete().eq("court_id", courtId);
 
-    // Insert new matches
-    const matchInserts = matches.map((match, index) => ({
+    // Insert new matches with status field
+    const matchInserts = result.matches.map((match, index) => ({
       court_id: courtId,
       match_index: index,
       team1_player1_id: match.team1_player1_id,
       team1_player2_id: match.team1_player2_id,
       team2_player1_id: match.team2_player1_id,
       team2_player2_id: match.team2_player2_id,
+      status: "pending",
+      override_played: false,
     }));
 
     const { error: insertError } = await supabase.from("matches").insert(matchInserts);
@@ -73,7 +79,12 @@ serve(async (req) => {
     if (stateError) throw stateError;
 
     return new Response(
-      JSON.stringify({ success: true, matchCount: matches.length }),
+      JSON.stringify({ 
+        success: true, 
+        matchCount: result.matches.length,
+        fallbackLevel: result.fallbackLevel,
+        attempts: result.attempts
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {
@@ -86,110 +97,84 @@ serve(async (req) => {
   }
 });
 
-function generateRotation(players: Player[]): Match[] {
+interface RotationResult {
+  success: boolean;
+  matches: Match[];
+  fallbackLevel: number;
+  attempts: number;
+}
+
+function generateFairRotation(players: Player[]): RotationResult {
+  const MAX_ATTEMPTS = 50;
+  const MATCH_COUNT = 17;
+  
+  // Try with strict constraints first, then progressively relax
+  for (let fallbackLevel = 0; fallbackLevel <= 2; fallbackLevel++) {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      const result = tryGenerateRotation(players, MATCH_COUNT, fallbackLevel);
+      if (result) {
+        return {
+          success: true,
+          matches: result,
+          fallbackLevel,
+          attempts: attempt + 1
+        };
+      }
+    }
+  }
+  
+  return { success: false, matches: [], fallbackLevel: -1, attempts: MAX_ATTEMPTS * 3 };
+}
+
+function tryGenerateRotation(players: Player[], matchCount: number, fallbackLevel: number): Match[] | null {
   const n = players.length;
   const matches: Match[] = [];
+  
+  // Tracking structures
   const partnerPairs = new Set<string>();
   const playerMatchCounts: Record<string, number> = {};
   const playerLastPlayed: Record<string, number> = {};
+  const opponentCounts: Record<string, number> = {};
   
+  // Initialize
   players.forEach(p => {
     playerMatchCounts[p.id] = 0;
     playerLastPlayed[p.id] = -999;
   });
-
-  const makePairKey = (a: string, b: string) => [a, b].sort().join("-");
   
+  const makePairKey = (a: string, b: string) => [a, b].sort().join("-");
   const hasPartnered = (a: string, b: string) => partnerPairs.has(makePairKey(a, b));
   
-  const countOpponentMeetings = (team1: string[], team2: string[], opponentCounts: Record<string, number>) => {
-    let count = 0;
-    for (const p1 of team1) {
-      for (const p2 of team2) {
-        const key = makePairKey(p1, p2);
-        count += opponentCounts[key] || 0;
-      }
+  // Calculate expected matches per player
+  const totalPlayerSlots = matchCount * 4;
+  const minMatches = Math.floor(totalPlayerSlots / n);
+  const maxMatches = Math.ceil(totalPlayerSlots / n);
+  
+  for (let matchIndex = 0; matchIndex < matchCount; matchIndex++) {
+    const candidates = findMatchCandidates(
+      players,
+      matchIndex,
+      playerMatchCounts,
+      playerLastPlayed,
+      partnerPairs,
+      opponentCounts,
+      minMatches,
+      maxMatches,
+      fallbackLevel
+    );
+    
+    if (candidates.length === 0) {
+      return null; // Backtrack signal
     }
-    return count;
-  };
-
-  const opponentCounts: Record<string, number> = {};
-
-  for (let matchIndex = 0; matchIndex < 17; matchIndex++) {
-    // Get eligible players (not sat out more than 2 consecutive)
-    const eligiblePlayers = players.filter(p => {
-      const lastPlayed = playerLastPlayed[p.id];
-      return matchIndex - lastPlayed <= 2;
-    });
-
-    // Sort by match count (ascending) to balance play time
-    const sortedPlayers = [...players].sort((a, b) => {
-      const aCount = playerMatchCounts[a.id];
-      const bCount = playerMatchCounts[b.id];
-      if (aCount !== bCount) return aCount - bCount;
-      // Tie-breaker: who sat out longer
-      return playerLastPlayed[a.id] - playerLastPlayed[b.id];
-    });
-
-    // Try to find 4 players for a valid match
-    let bestMatch: Match | null = null;
-    let bestScore = Infinity;
-
-    // Try combinations of 4 players
-    for (let i = 0; i < sortedPlayers.length && !bestMatch; i++) {
-      for (let j = i + 1; j < sortedPlayers.length && !bestMatch; j++) {
-        for (let k = j + 1; k < sortedPlayers.length && !bestMatch; k++) {
-          for (let l = k + 1; l < sortedPlayers.length; l++) {
-            const fourPlayers = [sortedPlayers[i], sortedPlayers[j], sortedPlayers[k], sortedPlayers[l]];
-            
-            // Check sit-out constraint for all 4
-            const allEligible = fourPlayers.every(p => matchIndex - playerLastPlayed[p.id] <= 3);
-            if (!allEligible) continue;
-
-            // Try all team pairings (3 ways to split 4 into 2 pairs)
-            const pairings = [
-              [[0, 1], [2, 3]],
-              [[0, 2], [1, 3]],
-              [[0, 3], [1, 2]],
-            ];
-
-            for (const [[a, b], [c, d]] of pairings) {
-              const team1 = [fourPlayers[a].id, fourPlayers[b].id];
-              const team2 = [fourPlayers[c].id, fourPlayers[d].id];
-
-              // Check no repeat partners
-              if (hasPartnered(team1[0], team1[1])) continue;
-              if (hasPartnered(team2[0], team2[1])) continue;
-
-              // Score based on opponent repeats
-              const score = countOpponentMeetings(team1, team2, opponentCounts);
-              
-              if (score < bestScore) {
-                bestScore = score;
-                bestMatch = {
-                  team1_player1_id: team1[0],
-                  team1_player2_id: team1[1],
-                  team2_player1_id: team2[0],
-                  team2_player2_id: team2[1],
-                };
-              }
-            }
-          }
-        }
-      }
-    }
-
+    
+    // Shuffle candidates and pick the best one
+    shuffleArray(candidates);
+    const bestMatch = selectBestMatch(candidates, opponentCounts);
+    
     if (!bestMatch) {
-      // Fallback: just pick first 4 available, relax constraints
-      const available = [...sortedPlayers].slice(0, 4);
-      bestMatch = {
-        team1_player1_id: available[0].id,
-        team1_player2_id: available[1].id,
-        team2_player1_id: available[2].id,
-        team2_player2_id: available[3].id,
-      };
+      return null;
     }
-
+    
     // Record the match
     matches.push(bestMatch);
     
@@ -220,6 +205,195 @@ function generateRotation(players: Player[]): Match[] {
       }
     }
   }
-
+  
+  // Validate the rotation
+  if (!validateRotation(matches, players, playerMatchCounts, playerLastPlayed, partnerPairs, fallbackLevel)) {
+    return null;
+  }
+  
   return matches;
+}
+
+function findMatchCandidates(
+  players: Player[],
+  matchIndex: number,
+  playerMatchCounts: Record<string, number>,
+  playerLastPlayed: Record<string, number>,
+  partnerPairs: Set<string>,
+  opponentCounts: Record<string, number>,
+  minMatches: number,
+  maxMatches: number,
+  fallbackLevel: number
+): Match[] {
+  const candidates: Match[] = [];
+  const makePairKey = (a: string, b: string) => [a, b].sort().join("-");
+  const hasPartnered = (a: string, b: string) => partnerPairs.has(makePairKey(a, b));
+  
+  // Prioritize players who need more matches
+  const sortedPlayers = [...players].sort((a, b) => {
+    const aCount = playerMatchCounts[a.id];
+    const bCount = playerMatchCounts[b.id];
+    if (aCount !== bCount) return aCount - bCount;
+    return playerLastPlayed[a.id] - playerLastPlayed[b.id];
+  });
+  
+  // Max sit-out constraint (2 in strict mode, 3 in fallback)
+  const maxSitOut = fallbackLevel === 0 ? 2 : 3;
+  
+  // Filter eligible players
+  const eligiblePlayers = sortedPlayers.filter(p => {
+    const sitOutStreak = matchIndex - playerLastPlayed[p.id];
+    // Must play if sitting out too long
+    if (sitOutStreak > maxSitOut) return true;
+    // Can't play back-to-back in strict mode
+    if (fallbackLevel === 0 && playerLastPlayed[p.id] === matchIndex - 1) return false;
+    return true;
+  });
+  
+  // Must-play players (at max sit-out)
+  const mustPlayPlayers = eligiblePlayers.filter(p => 
+    matchIndex - playerLastPlayed[p.id] > maxSitOut
+  );
+  
+  // If more than 4 must-play, we have a problem
+  if (mustPlayPlayers.length > 4) {
+    return [];
+  }
+  
+  // Try combinations
+  for (let i = 0; i < sortedPlayers.length; i++) {
+    for (let j = i + 1; j < sortedPlayers.length; j++) {
+      for (let k = j + 1; k < sortedPlayers.length; k++) {
+        for (let l = k + 1; l < sortedPlayers.length; l++) {
+          const fourPlayers = [sortedPlayers[i], sortedPlayers[j], sortedPlayers[k], sortedPlayers[l]];
+          
+          // Check all must-play players are included
+          const includesAllMustPlay = mustPlayPlayers.every(mp => 
+            fourPlayers.some(fp => fp.id === mp.id)
+          );
+          if (!includesAllMustPlay) continue;
+          
+          // Check sit-out constraint
+          const allValidSitOut = fourPlayers.every(p => 
+            matchIndex - playerLastPlayed[p.id] <= maxSitOut + 1
+          );
+          if (!allValidSitOut) continue;
+          
+          // Check back-to-back constraint in strict mode
+          if (fallbackLevel === 0) {
+            const hasBackToBack = fourPlayers.some(p => 
+              playerLastPlayed[p.id] === matchIndex - 1
+            );
+            if (hasBackToBack) continue;
+          }
+          
+          // Check balance constraint
+          const wouldExceedMax = fourPlayers.some(p => 
+            playerMatchCounts[p.id] >= maxMatches
+          );
+          if (wouldExceedMax && fallbackLevel === 0) continue;
+          
+          // Try all team pairings
+          const pairings = [
+            [[0, 1], [2, 3]],
+            [[0, 2], [1, 3]],
+            [[0, 3], [1, 2]],
+          ];
+
+          for (const [[a, b], [c, d]] of pairings) {
+            const team1 = [fourPlayers[a].id, fourPlayers[b].id];
+            const team2 = [fourPlayers[c].id, fourPlayers[d].id];
+
+            // Check no repeat partners (always enforced except fallback 2)
+            if (fallbackLevel < 2) {
+              if (hasPartnered(team1[0], team1[1])) continue;
+              if (hasPartnered(team2[0], team2[1])) continue;
+            }
+
+            candidates.push({
+              team1_player1_id: team1[0],
+              team1_player2_id: team1[1],
+              team2_player1_id: team2[0],
+              team2_player2_id: team2[1],
+            });
+          }
+        }
+      }
+    }
+  }
+  
+  return candidates;
+}
+
+function selectBestMatch(candidates: Match[], opponentCounts: Record<string, number>): Match | null {
+  if (candidates.length === 0) return null;
+  
+  const makePairKey = (a: string, b: string) => [a, b].sort().join("-");
+  
+  // Score by opponent repeats (lower is better)
+  let bestMatch = candidates[0];
+  let bestScore = Infinity;
+  
+  for (const match of candidates) {
+    const team1 = [match.team1_player1_id, match.team1_player2_id];
+    const team2 = [match.team2_player1_id, match.team2_player2_id];
+    
+    let score = 0;
+    for (const p1 of team1) {
+      for (const p2 of team2) {
+        score += opponentCounts[makePairKey(p1, p2)] || 0;
+      }
+    }
+    
+    if (score < bestScore) {
+      bestScore = score;
+      bestMatch = match;
+    }
+  }
+  
+  return bestMatch;
+}
+
+function validateRotation(
+  matches: Match[],
+  players: Player[],
+  playerMatchCounts: Record<string, number>,
+  playerLastPlayed: Record<string, number>,
+  partnerPairs: Set<string>,
+  fallbackLevel: number
+): boolean {
+  // Check balance constraint
+  const counts = Object.values(playerMatchCounts);
+  const maxCount = Math.max(...counts);
+  const minCount = Math.min(...counts);
+  const maxDiff = fallbackLevel === 0 ? 1 : 2;
+  
+  if (maxCount - minCount > maxDiff) {
+    return false;
+  }
+  
+  // Check for repeat partners in strict mode
+  if (fallbackLevel < 2) {
+    const allPairs: string[] = [];
+    const makePairKey = (a: string, b: string) => [a, b].sort().join("-");
+    
+    for (const match of matches) {
+      const pair1 = makePairKey(match.team1_player1_id, match.team1_player2_id);
+      const pair2 = makePairKey(match.team2_player1_id, match.team2_player2_id);
+      
+      if (allPairs.includes(pair1) || allPairs.includes(pair2)) {
+        return false;
+      }
+      allPairs.push(pair1, pair2);
+    }
+  }
+  
+  return true;
+}
+
+function shuffleArray<T>(array: T[]): void {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
 }

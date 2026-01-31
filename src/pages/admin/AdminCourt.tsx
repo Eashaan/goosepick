@@ -5,9 +5,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { ChevronLeft, Plus, Trash2, Edit2, Check, X } from "lucide-react";
+import { ChevronLeft, ChevronDown, ChevronUp, Plus, Trash2, Edit2, Check, X } from "lucide-react";
 import PageLayout from "@/components/layout/PageLayout";
+import { Database } from "@/integrations/supabase/types";
+
+type Match = Database["public"]["Tables"]["matches"]["Row"];
 
 const AdminCourt = () => {
   const { courtId } = useParams();
@@ -21,6 +28,8 @@ const AdminCourt = () => {
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetPhrase, setResetPhrase] = useState("");
   const [resetPassword, setResetPassword] = useState("");
+  const [playersOpen, setPlayersOpen] = useState(true);
+  const [overrideMatchId, setOverrideMatchId] = useState<string | null>(null);
 
   useEffect(() => {
     const isAdmin = localStorage.getItem("gp_admin_unlocked") === "true";
@@ -70,6 +79,27 @@ const AdminCourt = () => {
       return data;
     },
   });
+
+  // Set up realtime subscriptions
+  useEffect(() => {
+    const channel = supabase
+      .channel(`admin-court-${courtNumber}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "matches", filter: `court_id=eq.${courtNumber}` },
+        () => queryClient.invalidateQueries({ queryKey: ["matches", courtNumber] })
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "court_state", filter: `court_id=eq.${courtNumber}` },
+        () => queryClient.invalidateQueries({ queryKey: ["court_state", courtNumber] })
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [courtNumber, queryClient]);
 
   // Add player mutation
   const addPlayer = useMutation({
@@ -143,6 +173,8 @@ const AdminCourt = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["matches", courtNumber] });
       queryClient.invalidateQueries({ queryKey: ["court_state", courtNumber] });
+      // Auto-collapse players section
+      setPlayersOpen(false);
       toast.success("Rotation generated!");
     },
     onError: (error: Error) => {
@@ -150,17 +182,55 @@ const AdminCourt = () => {
     },
   });
 
+  // Get the next uncompleted match
+  const getNextUncompletedMatch = () => {
+    return matches.find(m => m.status !== "completed");
+  };
+
+  // Get the match to play (override or next default)
+  const getMatchToPlay = (): Match | undefined => {
+    if (overrideMatchId) {
+      return matches.find(m => m.id === overrideMatchId);
+    }
+    return getNextUncompletedMatch();
+  };
+
+  // Get uncompleted matches for override dropdown
+  const getUncompletedMatches = () => {
+    return matches.filter(m => m.status !== "completed");
+  };
+
   // Start match mutation
   const startMatch = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
+      const matchToStart = getMatchToPlay();
+      if (!matchToStart) throw new Error("No match to start");
+
+      // Update match status
+      const { error: matchError } = await supabase
+        .from("matches")
+        .update({ 
+          status: "in_progress", 
+          started_at: new Date().toISOString() 
+        })
+        .eq("id", matchToStart.id);
+      if (matchError) throw matchError;
+
+      // Update court state
+      const { error: stateError } = await supabase
         .from("court_state")
-        .update({ phase: "in_progress", updated_at: new Date().toISOString() })
+        .update({ 
+          phase: "in_progress", 
+          current_match_index: matchToStart.match_index,
+          updated_at: new Date().toISOString() 
+        })
         .eq("court_id", courtNumber);
-      if (error) throw error;
+      if (stateError) throw stateError;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["matches", courtNumber] });
       queryClient.invalidateQueries({ queryKey: ["court_state", courtNumber] });
+      setOverrideMatchId(null);
       toast.success("Match started");
     },
   });
@@ -171,21 +241,32 @@ const AdminCourt = () => {
       const currentMatch = matches.find(m => m.match_index === courtState?.current_match_index);
       if (!currentMatch) throw new Error("No current match found");
 
-      // Update match scores
+      const wasOverride = overrideMatchId !== null;
+
+      // Update match scores and status
       const { error: matchError } = await supabase
         .from("matches")
-        .update({ team1_score: team1Score, team2_score: team2Score })
+        .update({ 
+          team1_score: team1Score, 
+          team2_score: team2Score,
+          status: "completed",
+          completed_at: new Date().toISOString(),
+          override_played: wasOverride
+        })
         .eq("id", currentMatch.id);
       if (matchError) throw matchError;
 
-      // Advance to next match or complete
-      const nextIndex = (courtState?.current_match_index || 0) + 1;
-      const isCompleted = nextIndex >= matches.length;
+      // Find next uncompleted match
+      const nextMatch = matches.find(m => 
+        m.status !== "completed" && m.id !== currentMatch.id
+      );
+      
+      const isCompleted = !nextMatch;
 
       const { error: stateError } = await supabase
         .from("court_state")
         .update({
-          current_match_index: isCompleted ? courtState?.current_match_index : nextIndex,
+          current_match_index: isCompleted ? courtState?.current_match_index : nextMatch?.match_index,
           phase: isCompleted ? "completed" : "idle",
           updated_at: new Date().toISOString(),
         })
@@ -202,11 +283,8 @@ const AdminCourt = () => {
   // Reset court mutation
   const resetCourt = useMutation({
     mutationFn: async () => {
-      // Delete matches first
       await supabase.from("matches").delete().eq("court_id", courtNumber);
-      // Delete players
       await supabase.from("players").delete().eq("court_id", courtNumber);
-      // Reset court state
       await supabase
         .from("court_state")
         .update({ current_match_index: 0, phase: "idle", updated_at: new Date().toISOString() })
@@ -219,6 +297,7 @@ const AdminCourt = () => {
       setShowResetDialog(false);
       setResetPhrase("");
       setResetPassword("");
+      setPlayersOpen(true);
       toast.success("Court reset successfully");
     },
   });
@@ -239,9 +318,10 @@ const AdminCourt = () => {
     }
   };
 
-  const currentMatch = matches.find(m => m.match_index === courtState?.current_match_index);
   const hasRotation = matches.length > 0;
   const canGenerateRotation = players.length >= 8 && players.length <= 12 && !hasRotation;
+  const matchToPlay = getMatchToPlay();
+  const currentMatch = matches.find(m => m.match_index === courtState?.current_match_index);
 
   const [team1Score, setTeam1Score] = useState("");
   const [team2Score, setTeam2Score] = useState("");
@@ -250,6 +330,17 @@ const AdminCourt = () => {
     if (!playerId) return "—";
     const player = players.find(p => p.id === playerId);
     return player?.name || "—";
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "completed":
+        return <span className="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-500">Completed</span>;
+      case "in_progress":
+        return <span className="text-xs px-2 py-1 rounded-full bg-primary/20 text-primary">In Progress</span>;
+      default:
+        return <span className="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">Pending</span>;
+    }
   };
 
   return (
@@ -266,248 +357,377 @@ const AdminCourt = () => {
             <h1 className="text-2xl font-bold">Court {courtNumber}</h1>
           </div>
 
-          {/* Players Section */}
-          <Card className="mb-6 bg-card border-border">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-lg">
-                Players {players.length > 0 && <span className="ml-2 text-sm font-normal text-primary">({players.length})</span>}
-              </CardTitle>
-              {players.length > 0 && hasRotation && (
-                <p className="text-xs text-muted-foreground">
-                  Renaming updates displays; history unchanged.
-                </p>
-              )}
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Player list */}
-              {playersLoading ? (
-                <p className="text-muted-foreground">Loading...</p>
-              ) : (
-                <div className="space-y-2">
-                  {players.map((player) => (
-                    <div key={player.id} className="flex items-center gap-2 rounded-lg bg-secondary p-3">
-                      {editingPlayerId === player.id ? (
-                        <>
-                          <Input
-                            value={editingName}
-                            onChange={(e) => setEditingName(e.target.value)}
-                            className="flex-1 h-8 bg-background"
-                            autoFocus
-                          />
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => updatePlayer.mutate({ id: player.id, name: editingName })}
-                            disabled={!editingName.trim()}
-                          >
-                            <Check className="h-4 w-4 text-green-500" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => setEditingPlayerId(null)}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <span className="flex-1">{player.name}</span>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => {
-                              setEditingPlayerId(player.id);
-                              setEditingName(player.name);
-                            }}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          {!hasRotation && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => deletePlayer.mutate(player.id)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+          {/* Admin Tabs */}
+          <Tabs defaultValue="scoring" className="space-y-6">
+            <TabsList className="w-full bg-secondary rounded-xl h-12">
+              <TabsTrigger 
+                value="scoring" 
+                className="flex-1 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+              >
+                Live Scoring Inputs
+              </TabsTrigger>
+              <TabsTrigger 
+                value="roster" 
+                className="flex-1 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+              >
+                Court Roster
+              </TabsTrigger>
+            </TabsList>
 
-              {/* Add player form */}
-              {players.length < 12 && !hasRotation && (
-                <form onSubmit={handleAddPlayer} className="flex gap-2">
-                  <Input
-                    placeholder="Player name"
-                    value={newPlayerName}
-                    onChange={(e) => setNewPlayerName(e.target.value)}
-                    className="flex-1 bg-secondary"
-                  />
-                  <Button type="submit" size="icon" disabled={!newPlayerName.trim()}>
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </form>
-              )}
-
-              {players.length < 8 && (
-                <p className="text-sm text-muted-foreground">
-                  Add {8 - players.length} more player{8 - players.length !== 1 ? "s" : ""} to generate rotation
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Rotation & Match Control */}
-          <Card className="mb-6 bg-card border-border">
-            <CardHeader>
-              <CardTitle className="text-lg">Match Control</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {!hasRotation ? (
-                <Button
-                  onClick={() => generateRotation.mutate()}
-                  disabled={!canGenerateRotation || generateRotation.isPending}
-                  className="w-full h-12 text-lg rounded-xl"
-                >
-                  {generateRotation.isPending ? "Generating..." : "Generate Rotation"}
-                </Button>
-              ) : (
-                <>
-                  {/* Current match info */}
-                  <div className="rounded-xl bg-secondary p-4">
-                    <div className="mb-2 text-sm text-muted-foreground">
-                      Match {(courtState?.current_match_index || 0) + 1} of {matches.length}
-                    </div>
-                    {currentMatch && courtState?.phase !== "completed" ? (
-                      <div className="text-lg font-semibold">
-                        {getPlayerName(currentMatch.team1_player1_id)} & {getPlayerName(currentMatch.team1_player2_id)}
-                        <span className="mx-2 text-muted-foreground">vs</span>
-                        {getPlayerName(currentMatch.team2_player1_id)} & {getPlayerName(currentMatch.team2_player2_id)}
+            {/* Live Scoring Inputs Tab */}
+            <TabsContent value="scoring" className="space-y-6">
+              {/* Players Section (Collapsible) */}
+              <Collapsible open={playersOpen} onOpenChange={setPlayersOpen}>
+                <Card className="bg-card border-border">
+                  <CollapsibleTrigger className="w-full">
+                    <CardHeader className="flex flex-row items-center justify-between">
+                      <CardTitle className="text-lg">
+                        Players {players.length > 0 && <span className="ml-2 text-sm font-normal text-primary">({players.length})</span>}
+                      </CardTitle>
+                      <div className="flex items-center gap-2">
+                        {players.length > 0 && hasRotation && (
+                          <p className="text-xs text-muted-foreground hidden sm:block">
+                            Renaming updates displays; history unchanged.
+                          </p>
+                        )}
+                        {playersOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                       </div>
-                    ) : (
-                      <div className="text-lg font-semibold text-primary">Court Completed</div>
-                    )}
-                    <div className="mt-2 text-sm text-primary capitalize">
-                      {courtState?.phase || "idle"}
-                    </div>
-                  </div>
+                    </CardHeader>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="space-y-4">
+                      {playersLoading ? (
+                        <p className="text-muted-foreground">Loading...</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {players.map((player) => (
+                            <div key={player.id} className="flex items-center gap-2 rounded-lg bg-secondary p-3">
+                              {editingPlayerId === player.id ? (
+                                <>
+                                  <Input
+                                    value={editingName}
+                                    onChange={(e) => setEditingName(e.target.value)}
+                                    className="flex-1 h-8 bg-background"
+                                    autoFocus
+                                  />
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => updatePlayer.mutate({ id: player.id, name: editingName })}
+                                    disabled={!editingName.trim()}
+                                  >
+                                    <Check className="h-4 w-4 text-green-500" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => setEditingPlayerId(null)}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="flex-1">{player.name}</span>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => {
+                                      setEditingPlayerId(player.id);
+                                      setEditingName(player.name);
+                                    }}
+                                  >
+                                    <Edit2 className="h-4 w-4" />
+                                  </Button>
+                                  {!hasRotation && (
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      onClick={() => deletePlayer.mutate(player.id)}
+                                    >
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
-                  {/* Match controls */}
-                  {courtState?.phase === "idle" && currentMatch && (
+                      {players.length < 12 && !hasRotation && (
+                        <form onSubmit={handleAddPlayer} className="flex gap-2">
+                          <Input
+                            placeholder="Player name"
+                            value={newPlayerName}
+                            onChange={(e) => setNewPlayerName(e.target.value)}
+                            className="flex-1 bg-secondary"
+                          />
+                          <Button type="submit" size="icon" disabled={!newPlayerName.trim()}>
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </form>
+                      )}
+
+                      {players.length < 8 && (
+                        <p className="text-sm text-muted-foreground">
+                          Add {8 - players.length} more player{8 - players.length !== 1 ? "s" : ""} to generate rotation
+                        </p>
+                      )}
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+
+              {/* Rotation & Match Control */}
+              <Card className="bg-card border-border">
+                <CardHeader>
+                  <CardTitle className="text-lg">Match Control</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {!hasRotation ? (
                     <Button
-                      onClick={() => startMatch.mutate()}
+                      onClick={() => generateRotation.mutate()}
+                      disabled={!canGenerateRotation || generateRotation.isPending}
                       className="w-full h-12 text-lg rounded-xl"
                     >
-                      Start Match
+                      {generateRotation.isPending ? "Generating..." : "Generate Rotation"}
                     </Button>
-                  )}
-
-                  {courtState?.phase === "in_progress" && currentMatch && (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="mb-2 block text-sm text-muted-foreground">Team 1 Score</label>
-                          <Input
-                            type="number"
-                            min="0"
-                            value={team1Score}
-                            onChange={(e) => setTeam1Score(e.target.value)}
-                            className="h-12 text-center text-xl bg-secondary"
-                          />
+                  ) : (
+                    <>
+                      {/* Current match info */}
+                      <div className="rounded-xl bg-secondary p-4">
+                        <div className="mb-2 text-sm text-muted-foreground">
+                          Match {(courtState?.current_match_index || 0) + 1} of {matches.length}
                         </div>
-                        <div>
-                          <label className="mb-2 block text-sm text-muted-foreground">Team 2 Score</label>
-                          <Input
-                            type="number"
-                            min="0"
-                            value={team2Score}
-                            onChange={(e) => setTeam2Score(e.target.value)}
-                            className="h-12 text-center text-xl bg-secondary"
-                          />
+                        {matchToPlay && courtState?.phase !== "completed" ? (
+                          <div className="text-lg font-semibold">
+                            {getPlayerName(matchToPlay.team1_player1_id)} & {getPlayerName(matchToPlay.team1_player2_id)}
+                            <span className="mx-2 text-muted-foreground">vs</span>
+                            {getPlayerName(matchToPlay.team2_player1_id)} & {getPlayerName(matchToPlay.team2_player2_id)}
+                          </div>
+                        ) : (
+                          <div className="text-lg font-semibold text-primary">Court Completed</div>
+                        )}
+                        <div className="mt-2 text-sm text-primary capitalize">
+                          {courtState?.phase || "idle"}
                         </div>
                       </div>
-                      <Button
-                        onClick={() => {
-                          endMatch.mutate({
-                            team1Score: parseInt(team1Score) || 0,
-                            team2Score: parseInt(team2Score) || 0,
-                          });
-                          setTeam1Score("");
-                          setTeam2Score("");
-                        }}
-                        disabled={!team1Score || !team2Score}
-                        className="w-full h-12 text-lg rounded-xl"
-                      >
-                        End Match
-                      </Button>
-                    </div>
-                  )}
-                </>
-              )}
-            </CardContent>
-          </Card>
 
-          {/* Reset Section */}
-          <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="text-lg text-destructive">Danger Zone</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {!showResetDialog ? (
-                <Button
-                  variant="outline"
-                  onClick={() => setShowResetDialog(true)}
-                  className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                >
-                  Reset Court
-                </Button>
-              ) : (
-                <div className="space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    Type "RESET COURT {courtNumber}" and enter password to confirm
-                  </p>
-                  <Input
-                    placeholder={`RESET COURT ${courtNumber}`}
-                    value={resetPhrase}
-                    onChange={(e) => setResetPhrase(e.target.value)}
-                    className="bg-secondary"
-                  />
-                  <Input
-                    type="password"
-                    placeholder="Password"
-                    value={resetPassword}
-                    onChange={(e) => setResetPassword(e.target.value)}
-                    className="bg-secondary"
-                  />
-                  <div className="flex gap-2">
+                      {/* Override dropdown */}
+                      {courtState?.phase === "idle" && getUncompletedMatches().length > 1 && (
+                        <div className="space-y-2">
+                          <label className="text-sm text-muted-foreground">Override Match (optional)</label>
+                          <Select 
+                            value={overrideMatchId || ""} 
+                            onValueChange={(val) => setOverrideMatchId(val || null)}
+                          >
+                            <SelectTrigger className="bg-secondary">
+                              <SelectValue placeholder="Play default next match" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="">Play default next match</SelectItem>
+                              {getUncompletedMatches().map((m) => (
+                                <SelectItem key={m.id} value={m.id}>
+                                  Match {m.match_index + 1}: {getPlayerName(m.team1_player1_id)} & {getPlayerName(m.team1_player2_id)} vs {getPlayerName(m.team2_player1_id)} & {getPlayerName(m.team2_player2_id)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {overrideMatchId && (
+                            <p className="text-xs text-primary">
+                              Override selected. This match will be skipped when its turn comes.
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Match controls */}
+                      {courtState?.phase === "idle" && matchToPlay && (
+                        <Button
+                          onClick={() => startMatch.mutate()}
+                          className="w-full h-12 text-lg rounded-xl"
+                        >
+                          Start Match {overrideMatchId ? `(#${matchToPlay.match_index + 1})` : ""}
+                        </Button>
+                      )}
+
+                      {courtState?.phase === "in_progress" && currentMatch && (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="mb-2 block text-sm text-muted-foreground">Team 1 Score</label>
+                              <Input
+                                type="number"
+                                min="0"
+                                value={team1Score}
+                                onChange={(e) => setTeam1Score(e.target.value)}
+                                className="h-12 text-center text-xl bg-secondary"
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-2 block text-sm text-muted-foreground">Team 2 Score</label>
+                              <Input
+                                type="number"
+                                min="0"
+                                value={team2Score}
+                                onChange={(e) => setTeam2Score(e.target.value)}
+                                className="h-12 text-center text-xl bg-secondary"
+                              />
+                            </div>
+                          </div>
+                          <Button
+                            onClick={() => {
+                              endMatch.mutate({
+                                team1Score: parseInt(team1Score) || 0,
+                                team2Score: parseInt(team2Score) || 0,
+                              });
+                              setTeam1Score("");
+                              setTeam2Score("");
+                            }}
+                            disabled={!team1Score || !team2Score}
+                            className="w-full h-12 text-lg rounded-xl"
+                          >
+                            End Match
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Reset Section */}
+              <Card className="bg-card border-border">
+                <CardHeader>
+                  <CardTitle className="text-lg text-destructive">Danger Zone</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {!showResetDialog ? (
                     <Button
                       variant="outline"
-                      onClick={() => {
-                        setShowResetDialog(false);
-                        setResetPhrase("");
-                        setResetPassword("");
-                      }}
-                      className="flex-1"
+                      onClick={() => setShowResetDialog(true)}
+                      className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
                     >
-                      Cancel
+                      Reset Court
                     </Button>
-                    <Button
-                      variant="destructive"
-                      onClick={handleResetCourt}
-                      className="flex-1"
-                    >
-                      Reset
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                  ) : (
+                    <div className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        Type "RESET COURT {courtNumber}" and enter password to confirm
+                      </p>
+                      <Input
+                        placeholder={`RESET COURT ${courtNumber}`}
+                        value={resetPhrase}
+                        onChange={(e) => setResetPhrase(e.target.value)}
+                        className="bg-secondary"
+                      />
+                      <Input
+                        type="password"
+                        placeholder="Password"
+                        value={resetPassword}
+                        onChange={(e) => setResetPassword(e.target.value)}
+                        className="bg-secondary"
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setShowResetDialog(false);
+                            setResetPhrase("");
+                            setResetPassword("");
+                          }}
+                          className="flex-1"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          onClick={handleResetCourt}
+                          className="flex-1"
+                        >
+                          Reset
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Court Roster Tab */}
+            <TabsContent value="roster">
+              <Card className="bg-card border-border">
+                <CardHeader>
+                  <CardTitle className="text-lg">Full Court Roster</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {matches.length === 0 ? (
+                    <div className="text-center py-12">
+                      <p className="text-muted-foreground">Waiting for rotation to be generated...</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="border-border">
+                            <TableHead className="text-xs">#</TableHead>
+                            <TableHead className="text-xs">Team 1</TableHead>
+                            <TableHead className="text-xs">Team 2</TableHead>
+                            <TableHead className="text-xs text-center">Score</TableHead>
+                            <TableHead className="text-xs text-center">Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {matches.map((match) => {
+                            const isCurrent = match.match_index === courtState?.current_match_index;
+                            const isCompleted = match.status === "completed";
+
+                            return (
+                              <TableRow
+                                key={match.id}
+                                className={`border-border ${
+                                  isCurrent && courtState?.phase === "in_progress" ? "bg-primary/10" : isCompleted ? "opacity-60" : ""
+                                }`}
+                              >
+                                <TableCell className={`font-medium ${isCurrent ? "text-primary" : ""}`}>
+                                  {match.match_index + 1}
+                                </TableCell>
+                                <TableCell className="text-sm">
+                                  <div>
+                                    <p>{getPlayerName(match.team1_player1_id)}</p>
+                                    <p>{getPlayerName(match.team1_player2_id)}</p>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-sm">
+                                  <div>
+                                    <p>{getPlayerName(match.team2_player1_id)}</p>
+                                    <p>{getPlayerName(match.team2_player2_id)}</p>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  {isCompleted ? (
+                                    <span className="font-semibold">
+                                      {match.team1_score} - {match.team2_score}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  {getStatusBadge(match.status || "pending")}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </PageLayout>

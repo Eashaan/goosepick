@@ -7,13 +7,15 @@ const Index = () => {
   return (
     <PageLayout>
       <div className="flex min-h-screen flex-col items-center justify-center px-6">
-        {/* Logo */}
-        <div className="mb-12 animate-fade-in">
-          <img
-            src={goosepickLogo}
-            alt="Goosepick"
-            className="h-24 w-auto md:h-32"
-          />
+        {/* Logo - Fixed aspect ratio container */}
+        <div className="mb-12 animate-fade-in w-full max-w-[280px] md:max-w-[400px] flex-shrink-0">
+          <div className="relative w-full" style={{ aspectRatio: "3 / 1" }}>
+            <img
+              src={goosepickLogo}
+              alt="Goosepick"
+              className="absolute inset-0 w-full h-full object-contain"
+            />
+          </div>
         </div>
 
         {/* CTAs */}

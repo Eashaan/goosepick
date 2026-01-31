@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChevronLeft } from "lucide-react";
@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import PageLayout from "@/components/layout/PageLayout";
 import CourtPulse from "@/components/public/CourtPulse";
 import PersonalRoster from "@/components/public/PersonalRoster";
-import CourtRoster from "@/components/public/CourtRoster";
 import Leaderboard from "@/components/public/Leaderboard";
 
 const PublicCourt = () => {
@@ -126,14 +125,11 @@ const PublicCourt = () => {
           totalMatches={matches.length || 17}
         />
 
-        {/* Tabs */}
+        {/* Tabs - Only Personal Roster and Leaderboard */}
         <Tabs defaultValue="personal" className="flex-1 flex flex-col">
           <TabsList className="sticky top-0 z-10 mx-4 bg-secondary rounded-xl h-12">
             <TabsTrigger value="personal" className="flex-1 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Personal Roster
-            </TabsTrigger>
-            <TabsTrigger value="court" className="flex-1 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              Court Roster
             </TabsTrigger>
             <TabsTrigger value="leaderboard" className="flex-1 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Leaderboard
@@ -146,14 +142,6 @@ const PublicCourt = () => {
               players={players}
               matches={matches}
               courtState={courtState}
-            />
-          </TabsContent>
-
-          <TabsContent value="court" className="flex-1 mt-0 p-4">
-            <CourtRoster
-              matches={matches}
-              players={players}
-              currentMatchIndex={courtState?.current_match_index}
             />
           </TabsContent>
 
