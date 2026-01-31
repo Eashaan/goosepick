@@ -625,14 +625,14 @@ const AdminCourt = () => {
                         <div className="space-y-2">
                           <label className="text-sm text-muted-foreground">Override Match (optional)</label>
                           <Select 
-                            value={overrideMatchId || ""} 
-                            onValueChange={(val) => setOverrideMatchId(val || null)}
+                            value={overrideMatchId || "default"} 
+                            onValueChange={(val) => setOverrideMatchId(val === "default" ? null : val)}
                           >
                             <SelectTrigger className="bg-secondary">
                               <SelectValue placeholder="Play default next match" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="">Play default next match</SelectItem>
+                              <SelectItem value="default">Play default next match</SelectItem>
                               {getUncompletedMatches().map((m) => (
                                 <SelectItem key={m.id} value={m.id}>
                                   Match {m.match_index + 1}: {getPlayerName(m.team1_player1_id)} & {getPlayerName(m.team1_player2_id)} vs {getPlayerName(m.team2_player1_id)} & {getPlayerName(m.team2_player2_id)}
