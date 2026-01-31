@@ -86,12 +86,12 @@ const FeedbackModal = ({
         </button>
 
         <DialogHeader>
-          <DialogTitle className="text-center text-xl">Quick feedback?</DialogTitle>
+          <DialogTitle className="text-center text-xl">You're done with all your matches. Well done 👏</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6">
           <p className="text-sm text-muted-foreground text-center">
-            Your feedback helps us make your next Goosepick Social even better.
+            Your feedback will help us enhance your next experience with us
           </p>
 
           {/* Rating options */}

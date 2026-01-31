@@ -1,6 +1,4 @@
 import { useState, useEffect, useMemo } from "react";
-import { useQueryClient, useMutation } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { Database } from "@/integrations/supabase/types";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,6 +9,8 @@ import SlotMachineRoadmap from "./SlotMachineRoadmap";
 import PersonalStats from "./PersonalStats";
 import StatsCardModal from "./StatsCardModal";
 import FeedbackModal from "./FeedbackModal";
+import RankPopup from "./RankPopup";
+import PodiumSummaryPopup from "./PodiumSummaryPopup";
 
 type CourtState = Database["public"]["Tables"]["court_state"]["Row"];
 type Match = Database["public"]["Tables"]["matches"]["Row"];
@@ -29,6 +29,8 @@ const PersonalRoster = ({ courtId, players, matches, courtState }: PersonalRoste
   const [showStatsCard, setShowStatsCard] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [showRankPopup, setShowRankPopup] = useState(false);
+  const [showPodiumSummary, setShowPodiumSummary] = useState(false);
 
   // Load saved player from localStorage
   useEffect(() => {
@@ -109,6 +111,79 @@ const PersonalRoster = ({ courtId, players, matches, courtState }: PersonalRoste
     return playerMatches.every(m => m.status === "completed");
   }, [selectedPlayerId, playerMatches]);
 
+  // Calculate leaderboard and player rank (competition ranking)
+  const { playerRank, podiumPlayers, allPlayersHaveMatches } = useMemo(() => {
+    // Calculate PI for all players
+    const playerStats = players.map(player => {
+      const pMatches = matches.filter(m =>
+        m.team1_player1_id === player.id ||
+        m.team1_player2_id === player.id ||
+        m.team2_player1_id === player.id ||
+        m.team2_player2_id === player.id
+      );
+
+      const completedMatches = pMatches.filter(m => m.status === "completed");
+      let wins = 0;
+      let totalPointDiff = 0;
+
+      completedMatches.forEach(match => {
+        const isTeam1 = match.team1_player1_id === player.id || match.team1_player2_id === player.id;
+        const team1Score = match.team1_score || 0;
+        const team2Score = match.team2_score || 0;
+
+        if (isTeam1) {
+          if (team1Score > team2Score) wins++;
+          totalPointDiff += team1Score - team2Score;
+        } else {
+          if (team2Score > team1Score) wins++;
+          totalPointDiff += team2Score - team1Score;
+        }
+      });
+
+      const matchCount = completedMatches.length;
+      const winPercentage = matchCount > 0 ? (wins / matchCount) * 100 : 0;
+      const avgPointDiff = matchCount > 0 ? totalPointDiff / matchCount : 0;
+      const performanceIndex = winPercentage + avgPointDiff;
+
+      return {
+        id: player.id,
+        name: player.name,
+        matchCount,
+        totalMatches: pMatches.length,
+        performanceIndex,
+        isFinished: matchCount === pMatches.length && pMatches.length > 0,
+      };
+    });
+
+    // Sort by PI descending
+    const sorted = [...playerStats].sort((a, b) => b.performanceIndex - a.performanceIndex);
+    
+    // Check if all players have at least 1 match
+    const allHaveMatches = playerStats.length > 0 && playerStats.every(s => s.matchCount > 0);
+
+    // Competition ranking: same PI = same rank, next distinct PI gets skipped ranks
+    let currentRank = 1;
+    const rankedPlayers = sorted.map((player, index) => {
+      if (index > 0 && player.performanceIndex < sorted[index - 1].performanceIndex) {
+        currentRank = index + 1;
+      }
+      return { ...player, rank: currentRank };
+    });
+
+    // Get player's rank
+    const selectedPlayerStats = rankedPlayers.find(p => p.id === selectedPlayerId);
+    const rank = selectedPlayerStats?.rank || 0;
+
+    // Get podium (top 3 ranks)
+    const podium = rankedPlayers.filter(p => p.rank <= 3);
+
+    return { 
+      playerRank: rank, 
+      podiumPlayers: podium.map(p => ({ name: p.name, rank: p.rank })),
+      allPlayersHaveMatches: allHaveMatches
+    };
+  }, [players, matches, selectedPlayerId]);
+
   // Trigger feedback modal when player completes final match
   useEffect(() => {
     const checkFeedback = async () => {
@@ -127,6 +202,60 @@ const PersonalRoster = ({ courtId, players, matches, courtState }: PersonalRoste
     
     checkFeedback();
   }, [hasCompletedAllMatches, selectedPlayerId, courtId, feedbackSubmitted]);
+
+  // Trigger rank popup for selected player when they complete all matches
+  useEffect(() => {
+    if (!hasCompletedAllMatches || !selectedPlayerId || playerRank === 0) return;
+
+    // Check if rank popup already shown for this player
+    const shownKey = `gp_rank_popup_${courtId}_${selectedPlayerId}`;
+    const alreadyShown = localStorage.getItem(shownKey);
+    if (alreadyShown) return;
+
+    // Small delay to let feedback modal show first
+    const timer = setTimeout(() => {
+      if (!showFeedback) {
+        setShowRankPopup(true);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [hasCompletedAllMatches, selectedPlayerId, playerRank, courtId, showFeedback]);
+
+  // Show rank popup after feedback is dismissed
+  useEffect(() => {
+    if (feedbackSubmitted && hasCompletedAllMatches && selectedPlayerId && playerRank > 0) {
+      const shownKey = `gp_rank_popup_${courtId}_${selectedPlayerId}`;
+      const alreadyShown = localStorage.getItem(shownKey);
+      if (!alreadyShown && !showFeedback) {
+        setShowRankPopup(true);
+      }
+    }
+  }, [feedbackSubmitted, hasCompletedAllMatches, selectedPlayerId, playerRank, courtId, showFeedback]);
+
+  // Fallback: Show podium summary when no player selected but all have at least 1 match
+  useEffect(() => {
+    if (selectedPlayerId) return; // Only for anonymous viewers
+    if (!allPlayersHaveMatches || players.length === 0) return;
+
+    const shownKey = `gp_podium_shown_${courtId}`;
+    const alreadyShown = localStorage.getItem(shownKey);
+    if (alreadyShown) return;
+
+    setShowPodiumSummary(true);
+  }, [selectedPlayerId, allPlayersHaveMatches, courtId, players.length]);
+
+  const handleRankPopupClose = () => {
+    setShowRankPopup(false);
+    if (selectedPlayerId) {
+      localStorage.setItem(`gp_rank_popup_${courtId}_${selectedPlayerId}`, "true");
+    }
+  };
+
+  const handlePodiumSummaryClose = () => {
+    setShowPodiumSummary(false);
+    localStorage.setItem(`gp_podium_shown_${courtId}`, "true");
+  };
 
   const nudge = getNudgeMessage();
   const selectedPlayer = players.find(p => p.id === selectedPlayerId);
@@ -149,6 +278,14 @@ const PersonalRoster = ({ courtId, players, matches, courtState }: PersonalRoste
             </SelectContent>
           </Select>
         </div>
+
+        {/* Podium Summary for anonymous viewers */}
+        {showPodiumSummary && podiumPlayers.length > 0 && (
+          <PodiumSummaryPopup
+            podium={podiumPlayers}
+            onClose={handlePodiumSummaryClose}
+          />
+        )}
       </div>
     );
   }
@@ -256,6 +393,15 @@ const PersonalRoster = ({ courtId, players, matches, courtState }: PersonalRoste
           localStorage.setItem(`gp_feedback_${courtId}_${selectedPlayerId}`, "true");
         }}
       />
+
+      {/* Rank Popup for selected player */}
+      {showRankPopup && playerRank > 0 && (
+        <RankPopup
+          rank={playerRank}
+          playerName={selectedPlayer?.name || ""}
+          onClose={handleRankPopupClose}
+        />
+      )}
     </div>
   );
 };

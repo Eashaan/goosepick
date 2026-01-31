@@ -1,7 +1,6 @@
-import { useMemo, useEffect, useState } from "react";
+import { useMemo } from "react";
 import { Database } from "@/integrations/supabase/types";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import PodiumPopup from "./PodiumPopup";
 
 type Match = Database["public"]["Tables"]["matches"]["Row"];
 type Player = Database["public"]["Tables"]["players"]["Row"];
@@ -26,11 +25,6 @@ interface PlayerStats {
 type PodiumTier = "gold" | "silver" | "bronze" | null;
 
 const Leaderboard = ({ matches, players }: LeaderboardProps) => {
-  const [shownPopups, setShownPopups] = useState<Set<string>>(() => {
-    const stored = localStorage.getItem("gp_podium_popups_shown");
-    return stored ? new Set(JSON.parse(stored)) : new Set();
-  });
-  const [currentPopup, setCurrentPopup] = useState<{ playerId: string; tier: PodiumTier; name: string } | null>(null);
 
   const { leaderboard, podiumTiers, allPlayersHaveMatches } = useMemo(() => {
     const stats: PlayerStats[] = players.map(player => {
@@ -106,32 +100,6 @@ const Leaderboard = ({ matches, players }: LeaderboardProps) => {
     return { leaderboard: sortedStats, podiumTiers: tiers, allPlayersHaveMatches: allHaveMatches };
   }, [matches, players]);
 
-  // Check for podium popup triggers
-  useEffect(() => {
-    if (!allPlayersHaveMatches) return;
-
-    for (const player of leaderboard) {
-      const tier = podiumTiers[player.id];
-      if (tier && player.isFinished) {
-        const popupKey = `${player.id}`;
-        if (!shownPopups.has(popupKey)) {
-          setCurrentPopup({ playerId: player.id, tier, name: player.name });
-          break;
-        }
-      }
-    }
-  }, [leaderboard, podiumTiers, shownPopups, allPlayersHaveMatches]);
-
-  const handleClosePopup = () => {
-    if (currentPopup) {
-      const newShown = new Set(shownPopups);
-      newShown.add(currentPopup.playerId);
-      setShownPopups(newShown);
-      localStorage.setItem("gp_podium_popups_shown", JSON.stringify([...newShown]));
-    }
-    setCurrentPopup(null);
-  };
-
   const getTierStyles = (tier: PodiumTier) => {
     switch (tier) {
       case "gold":
@@ -168,16 +136,16 @@ const Leaderboard = ({ matches, players }: LeaderboardProps) => {
 
   return (
     <>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow className="border-border">
-              <TableHead className="sticky left-0 bg-background z-10 text-xs">Player</TableHead>
-              <TableHead className="text-xs text-center">Matches</TableHead>
-              <TableHead className="text-xs text-center">Wins</TableHead>
-              <TableHead className="text-xs text-center">Win %</TableHead>
-              <TableHead className="text-xs text-center whitespace-nowrap">Avg Diff</TableHead>
-              <TableHead className="text-xs text-center">PI</TableHead>
+              <TableHead className="sticky left-0 bg-background z-20 text-xs">Player</TableHead>
+              <TableHead className="text-xs text-center bg-background">Matches</TableHead>
+              <TableHead className="text-xs text-center bg-background">Wins</TableHead>
+              <TableHead className="text-xs text-center bg-background">Win %</TableHead>
+              <TableHead className="text-xs text-center whitespace-nowrap bg-background">Avg Diff</TableHead>
+              <TableHead className="text-xs text-center bg-background">PI</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -190,7 +158,7 @@ const Leaderboard = ({ matches, players }: LeaderboardProps) => {
                   key={player.id} 
                   className={`border-border ${getTierStyles(tier)}`}
                 >
-                  <TableCell className={`sticky left-0 z-10 font-medium ${getTierStyles(tier)} bg-background`}>
+                <TableCell className={`sticky left-0 z-10 font-medium ${getTierStyles(tier)} bg-background`}>
                     <div className="flex items-center gap-2">
                       <span className="text-muted-foreground text-xs w-4">{index + 1}</span>
                       {medal && <span className="text-sm">{medal}</span>}
@@ -215,13 +183,6 @@ const Leaderboard = ({ matches, players }: LeaderboardProps) => {
         </Table>
       </div>
 
-      {currentPopup && (
-        <PodiumPopup
-          tier={currentPopup.tier!}
-          playerName={currentPopup.name}
-          onClose={handleClosePopup}
-        />
-      )}
     </>
   );
 };
