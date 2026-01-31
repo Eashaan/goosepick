@@ -229,28 +229,36 @@ const AdminCourt = () => {
     },
   });
 
-  // Get the next uncompleted match
-  const getNextUncompletedMatch = () => {
-    return matches.find(m => m.status !== "completed");
+  // Get the in_progress match from database (single source of truth)
+  const getInProgressMatch = (): Match | undefined => {
+    return matches.find(m => m.status === "in_progress");
   };
 
-  // Get the match to play (override or next default)
-  const getMatchToPlay = (): Match | undefined => {
+  // Get the next uncompleted match (not in_progress, not completed)
+  const getNextUncompletedMatch = (): Match | undefined => {
+    return matches.find(m => m.status !== "completed" && m.status !== "in_progress");
+  };
+
+  // Get the match to preview in dropdown (before starting)
+  const getMatchToStart = (): Match | undefined => {
     if (overrideMatchId) {
       return matches.find(m => m.id === overrideMatchId);
     }
     return getNextUncompletedMatch();
   };
 
-  // Get uncompleted matches for override dropdown
+  // Get uncompleted matches for override dropdown (exclude in_progress)
   const getUncompletedMatches = () => {
-    return matches.filter(m => m.status !== "completed");
+    return matches.filter(m => m.status !== "completed" && m.status !== "in_progress");
   };
+
+  // The ACTIVE match being played - derived from DB status
+  const activeMatch = getInProgressMatch();
 
   // Start match mutation
   const startMatch = useMutation({
     mutationFn: async () => {
-      const matchToStart = getMatchToPlay();
+      const matchToStart = getMatchToStart();
       if (!matchToStart) throw new Error("No match to start");
 
       // Update match status
@@ -366,8 +374,10 @@ const AdminCourt = () => {
 
   const hasRotation = matches.length > 0;
   const canGenerateRotation = players.length >= 8 && players.length <= 12 && !hasRotation;
-  const matchToPlay = getMatchToPlay();
-  const currentMatch = matches.find(m => m.match_index === courtState?.current_match_index);
+  const matchToStart = getMatchToStart(); // For displaying in dropdown / before start
+  const currentMatch = activeMatch || matches.find(m => m.match_index === courtState?.current_match_index);
+  // displayMatch: When in_progress, show the active match; otherwise show what would be started next
+  const displayMatch = courtState?.phase === "in_progress" ? activeMatch : matchToStart;
 
   const [team1Score, setTeam1Score] = useState("");
   const [team2Score, setTeam2Score] = useState("");
@@ -405,7 +415,7 @@ const AdminCourt = () => {
 
           {/* Admin Tabs */}
           <Tabs defaultValue="scoring" className="space-y-6">
-            <TabsList className="w-full bg-secondary rounded-xl h-12">
+            <TabsList className="sticky top-0 z-20 w-full bg-secondary rounded-xl h-12">
               <TabsTrigger 
                 value="scoring" 
                 className="flex-1 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
@@ -600,16 +610,21 @@ const AdminCourt = () => {
                         </Collapsible>
                       )}
 
-                      {/* Current match info */}
+                      {/* Current match info - shows ACTIVE match when in_progress */}
                       <div className="rounded-xl bg-secondary p-4">
                         <div className="mb-2 text-sm text-muted-foreground">
-                          Match {(courtState?.current_match_index || 0) + 1} of {matches.length}
+                          {courtState?.phase === "in_progress" && activeMatch
+                            ? `Match ${activeMatch.match_index + 1} of ${matches.length}`
+                            : displayMatch
+                              ? `Up Next: Match ${displayMatch.match_index + 1} of ${matches.length}`
+                              : `Match ${matches.length} of ${matches.length}`
+                          }
                         </div>
-                        {matchToPlay && courtState?.phase !== "completed" ? (
+                        {displayMatch && courtState?.phase !== "completed" ? (
                           <div className="text-lg font-semibold">
-                            {getPlayerName(matchToPlay.team1_player1_id)} & {getPlayerName(matchToPlay.team1_player2_id)}
+                            {getPlayerName(displayMatch.team1_player1_id)} & {getPlayerName(displayMatch.team1_player2_id)}
                             <span className="mx-2 text-muted-foreground">vs</span>
-                            {getPlayerName(matchToPlay.team2_player1_id)} & {getPlayerName(matchToPlay.team2_player2_id)}
+                            {getPlayerName(displayMatch.team2_player1_id)} & {getPlayerName(displayMatch.team2_player2_id)}
                           </div>
                         ) : (
                           <div className="text-lg font-semibold text-primary">Court Completed</div>
@@ -648,12 +663,12 @@ const AdminCourt = () => {
                       )}
 
                       {/* Match controls */}
-                      {courtState?.phase === "idle" && matchToPlay && (
+                      {courtState?.phase === "idle" && matchToStart && (
                         <Button
                           onClick={() => startMatch.mutate()}
                           className="w-full h-12 text-lg rounded-xl"
                         >
-                          Start Match {overrideMatchId ? `(#${matchToPlay.match_index + 1})` : ""}
+                          Start Match {overrideMatchId ? `(#${matchToStart.match_index + 1})` : ""}
                         </Button>
                       )}
 
@@ -764,15 +779,15 @@ const AdminCourt = () => {
                       <p className="text-muted-foreground">Waiting for rotation to be generated...</p>
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
                       <Table>
-                        <TableHeader>
+                        <TableHeader className="sticky top-0 z-10 bg-card">
                           <TableRow className="border-border">
-                            <TableHead className="text-xs">#</TableHead>
-                            <TableHead className="text-xs">Team 1</TableHead>
-                            <TableHead className="text-xs">Team 2</TableHead>
-                            <TableHead className="text-xs text-center">Score</TableHead>
-                            <TableHead className="text-xs text-center">Status</TableHead>
+                            <TableHead className="text-xs bg-card">#</TableHead>
+                            <TableHead className="text-xs bg-card">Team 1</TableHead>
+                            <TableHead className="text-xs bg-card">Team 2</TableHead>
+                            <TableHead className="text-xs text-center bg-card">Score</TableHead>
+                            <TableHead className="text-xs text-center bg-card">Status</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
