@@ -10,11 +10,33 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronDown, ChevronUp, Plus, Trash2, Edit2, Check, X } from "lucide-react";
+import { ChevronLeft, ChevronDown, ChevronUp, Plus, Trash2, Edit2, Check, X, Info } from "lucide-react";
 import PageLayout from "@/components/layout/PageLayout";
 import { Database } from "@/integrations/supabase/types";
 
 type Match = Database["public"]["Tables"]["matches"]["Row"];
+
+interface RotationDiagnostics {
+  player_count: number;
+  matches_per_court: number;
+  min_matches_per_player: number;
+  max_matches_per_player: number;
+  max_sitout_streak: number;
+  repeat_partner_count: number;
+  back_to_back_count: number;
+  attempts_full: number;
+  attempts_fallback1: number;
+  attempts_fallback2: number;
+  used_seed: number;
+  note?: string;
+}
+
+interface RotationResult {
+  ok: boolean;
+  generation_mode?: "full" | "fallback1" | "fallback2";
+  diagnostics?: RotationDiagnostics;
+  error?: string;
+}
 
 const AdminCourt = () => {
   const { courtId } = useParams();
@@ -30,6 +52,8 @@ const AdminCourt = () => {
   const [resetPassword, setResetPassword] = useState("");
   const [playersOpen, setPlayersOpen] = useState(true);
   const [overrideMatchId, setOverrideMatchId] = useState<string | null>(null);
+  const [rotationDiagnostics, setRotationDiagnostics] = useState<RotationDiagnostics | null>(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   useEffect(() => {
     const isAdmin = localStorage.getItem("gp_admin_unlocked") === "true";
@@ -163,22 +187,45 @@ const AdminCourt = () => {
 
   // Generate rotation mutation
   const generateRotation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (): Promise<RotationResult> => {
       const { data, error } = await supabase.functions.invoke("generate-rotation", {
         body: { courtId: courtNumber },
       });
       if (error) throw error;
-      return data;
+      return data as RotationResult;
     },
-    onSuccess: () => {
+    onSuccess: (data: RotationResult) => {
       queryClient.invalidateQueries({ queryKey: ["matches", courtNumber] });
       queryClient.invalidateQueries({ queryKey: ["court_state", courtNumber] });
       // Auto-collapse players section
       setPlayersOpen(false);
-      toast.success("Rotation generated!");
+      
+      if (!data.ok) {
+        toast.error(data.error || "Failed to generate rotation");
+        return;
+      }
+      
+      // Store diagnostics for display
+      if (data.diagnostics) {
+        setRotationDiagnostics(data.diagnostics);
+      }
+      
+      // Show appropriate toast based on generation mode
+      if (data.generation_mode === "full") {
+        toast.success("Rotation generated!");
+      } else if (data.generation_mode === "fallback1") {
+        toast.info("Rotation generated in Safe Mode (minor constraint relaxations).", {
+          duration: 5000,
+        });
+      } else if (data.generation_mode === "fallback2") {
+        toast.warning("Rotation generated in Basic Mode (best effort).", {
+          duration: 5000,
+        });
+      }
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Failed to generate rotation");
+      toast.error("Couldn't generate rotation right now. Please retry.");
+      console.error("Rotation generation error:", error);
     },
   });
 
@@ -486,15 +533,74 @@ const AdminCourt = () => {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {!hasRotation ? (
-                    <Button
-                      onClick={() => generateRotation.mutate()}
-                      disabled={!canGenerateRotation || generateRotation.isPending}
-                      className="w-full h-12 text-lg rounded-xl"
-                    >
-                      {generateRotation.isPending ? "Generating..." : "Generate Rotation"}
-                    </Button>
+                    <div className="space-y-4">
+                      <Button
+                        onClick={() => generateRotation.mutate()}
+                        disabled={!canGenerateRotation || generateRotation.isPending}
+                        className="w-full h-12 text-lg rounded-xl"
+                      >
+                        {generateRotation.isPending ? "Generating..." : "Generate Rotation"}
+                      </Button>
+                      {generateRotation.isError && (
+                        <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-4">
+                          <p className="text-sm text-destructive">
+                            Couldn't generate rotation. Please try again.
+                          </p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => generateRotation.mutate()}
+                            className="mt-2"
+                            disabled={generateRotation.isPending}
+                          >
+                            Retry
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <>
+                      {/* Diagnostics banner (if rotation used fallback) */}
+                      {rotationDiagnostics && (
+                        <Collapsible open={showDiagnostics} onOpenChange={setShowDiagnostics}>
+                          <div className={`rounded-lg p-3 ${
+                            rotationDiagnostics.note === "emergency_basic_used" 
+                              ? "bg-destructive/10 border border-destructive/20"
+                              : rotationDiagnostics.attempts_fallback2 > 0
+                                ? "bg-yellow-500/10 border border-yellow-500/20"
+                                : rotationDiagnostics.attempts_fallback1 > 0
+                                  ? "bg-blue-500/10 border border-blue-500/20"
+                                  : "bg-green-500/10 border border-green-500/20"
+                          }`}>
+                            <CollapsibleTrigger className="flex items-center gap-2 w-full text-left">
+                              <Info className="h-4 w-4" />
+                              <span className="text-sm flex-1">
+                                {rotationDiagnostics.note === "emergency_basic_used"
+                                  ? "Basic Mode (emergency fallback)"
+                                  : rotationDiagnostics.attempts_fallback2 > 0
+                                    ? "Basic Mode (best effort)"
+                                    : rotationDiagnostics.attempts_fallback1 > 0
+                                      ? "Safe Mode (minor relaxations)"
+                                      : "Full Mode (all constraints met)"}
+                              </span>
+                              {showDiagnostics ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </CollapsibleTrigger>
+                            <CollapsibleContent className="mt-3 pt-3 border-t border-border/30">
+                              <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                                <p>Players: {rotationDiagnostics.player_count}</p>
+                                <p>Matches: {rotationDiagnostics.matches_per_court}</p>
+                                <p>Min/Max per player: {rotationDiagnostics.min_matches_per_player}/{rotationDiagnostics.max_matches_per_player}</p>
+                                <p>Max sit-out: {rotationDiagnostics.max_sitout_streak}</p>
+                                <p>Repeat partners: {rotationDiagnostics.repeat_partner_count}</p>
+                                <p>Back-to-back: {rotationDiagnostics.back_to_back_count}</p>
+                                <p>Full attempts: {rotationDiagnostics.attempts_full}</p>
+                                <p>Fallback attempts: {rotationDiagnostics.attempts_fallback1 + rotationDiagnostics.attempts_fallback2}</p>
+                              </div>
+                            </CollapsibleContent>
+                          </div>
+                        </Collapsible>
+                      )}
+
                       {/* Current match info */}
                       <div className="rounded-xl bg-secondary p-4">
                         <div className="mb-2 text-sm text-muted-foreground">
