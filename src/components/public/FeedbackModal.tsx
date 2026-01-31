@@ -31,22 +31,33 @@ const FeedbackModal = ({
       return;
     }
 
+    // Client-side validation
+    const trimmedNote = note.trim();
+    if (trimmedNote.length > 120) {
+      toast.error("Note must be 120 characters or less");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from("feedback").insert({
-        court_id: courtId,
-        player_id: playerId,
-        rating,
-        note: note.trim() || null,
+      // Use edge function for server-side validation
+      const { data, error } = await supabase.functions.invoke('submit-feedback', {
+        body: {
+          court_id: courtId,
+          player_id: playerId,
+          rating,
+          note: trimmedNote || null,
+        },
       });
 
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
       toast.success("Thank you!");
       onSubmitted();
       onOpenChange(false);
-    } catch (error) {
-      toast.error("Failed to submit feedback");
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to submit feedback");
     } finally {
       setIsSubmitting(false);
     }
