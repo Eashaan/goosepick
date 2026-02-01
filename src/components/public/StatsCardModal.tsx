@@ -15,6 +15,7 @@ interface StatsCardModalProps {
   playerName: string;
   matches: Match[];
   players: Player[];
+  onDownloadComplete?: () => void;
 }
 
 const StatsCardModal = ({
@@ -24,6 +25,7 @@ const StatsCardModal = ({
   playerName,
   matches,
   players,
+  onDownloadComplete,
 }: StatsCardModalProps) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [showShareNudge, setShowShareNudge] = useState(false);
@@ -42,7 +44,6 @@ const StatsCardModal = ({
 
     let wins = 0;
     let totalPointDiff = 0;
-    const partnerCounts: Record<string, number> = {};
 
     completedMatches.forEach(match => {
       const isTeam1 = match.team1_player1_id === playerId || match.team1_player2_id === playerId;
@@ -52,13 +53,9 @@ const StatsCardModal = ({
       if (isTeam1) {
         if (team1Score > team2Score) wins++;
         totalPointDiff += team1Score - team2Score;
-        const partnerId = match.team1_player1_id === playerId ? match.team1_player2_id : match.team1_player1_id;
-        if (partnerId) partnerCounts[partnerId] = (partnerCounts[partnerId] || 0) + 1;
       } else {
         if (team2Score > team1Score) wins++;
         totalPointDiff += team2Score - team1Score;
-        const partnerId = match.team2_player1_id === playerId ? match.team2_player2_id : match.team2_player1_id;
-        if (partnerId) partnerCounts[partnerId] = (partnerCounts[partnerId] || 0) + 1;
       }
     });
 
@@ -67,25 +64,23 @@ const StatsCardModal = ({
     const avgPointDiff = matchCount > 0 ? totalPointDiff / matchCount : 0;
     const performanceIndex = winPercentage + avgPointDiff;
 
-    let mostCommonPartner = "—";
-    let maxPartnerCount = 0;
-    Object.entries(partnerCounts).forEach(([partnerId, count]) => {
-      if (count > maxPartnerCount) {
-        maxPartnerCount = count;
-        const partner = players.find(p => p.id === partnerId);
-        mostCommonPartner = partner?.name || "—";
-      }
-    });
-
     return {
       matchesPlayed: matchCount,
       wins,
       winPercentage,
       avgPointDiff,
       performanceIndex,
-      mostCommonPartner,
     };
   }, [playerId, matches, players]);
+
+  // Format player name with apostrophe handling
+  const getPlayerNameTitle = () => {
+    const name = playerName.trim();
+    if (name.endsWith("s")) {
+      return `${name}' Game Day Stats`;
+    }
+    return `${name}'s Game Day Stats`;
+  };
 
   const handleDownload = async () => {
     if (!cardRef.current) return;
@@ -104,8 +99,13 @@ const StatsCardModal = ({
       link.href = canvas.toDataURL("image/png");
       link.click();
 
-      // Show share nudge
+      // Trigger share nudge
       setShowShareNudge(true);
+      
+      // Notify parent if callback provided
+      if (onDownloadComplete) {
+        onDownloadComplete();
+      }
     } catch (error) {
       toast.error("Failed to generate image");
     }
@@ -125,15 +125,23 @@ const StatsCardModal = ({
             className="p-8 bg-black text-white"
             style={{ fontFamily: "Inter, sans-serif" }}
           >
-            {/* Header */}
+            {/* Header with logo placeholder */}
             <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-[#FF4200] mb-1">Goosepick Social</h2>
+              {/* Logo placeholder - maintains aspect ratio */}
+              <div className="w-16 h-16 mx-auto mb-3 flex items-center justify-center">
+                <div className="w-full h-full bg-[#FF4200]/10 rounded-xl flex items-center justify-center">
+                  <span className="text-[#FF4200] text-2xl font-bold">GP</span>
+                </div>
+              </div>
+              <h2 className="text-lg font-semibold text-[#FF4200] mb-1">
+                India's Most Happening Pickleball Experience
+              </h2>
               <p className="text-sm text-gray-400">February 1, 2026</p>
             </div>
 
-            {/* Player Name */}
+            {/* Player Name Title */}
             <div className="text-center mb-8">
-              <p className="text-3xl font-bold">{playerName}</p>
+              <p className="text-2xl font-bold">{getPlayerNameTitle()}</p>
             </div>
 
             {/* Stats Grid */}
@@ -151,7 +159,7 @@ const StatsCardModal = ({
                 <p className="text-2xl font-bold">{stats.winPercentage.toFixed(0)}%</p>
               </div>
               <div className="text-center">
-                <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Avg Diff</p>
+                <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Avg. Point Diff.</p>
                 <p className="text-2xl font-bold">
                   {stats.avgPointDiff > 0 ? "+" : ""}{stats.avgPointDiff.toFixed(1)}
                 </p>
@@ -164,15 +172,9 @@ const StatsCardModal = ({
               <p className="text-4xl font-bold text-[#FF4200]">{stats.performanceIndex.toFixed(1)}</p>
             </div>
 
-            {/* Most Common Partner */}
-            <div className="text-center mt-6">
-              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Most Common Partner</p>
-              <p className="text-lg font-semibold">{stats.mostCommonPartner}</p>
-            </div>
-
             {/* Footer */}
             <div className="text-center mt-8 pt-4 border-t border-gray-800">
-              <p className="text-xs text-gray-500">@goosepickleball</p>
+              <p className="text-base font-medium text-white">@goosepickleball</p>
             </div>
           </div>
 
@@ -197,7 +199,7 @@ const StatsCardModal = ({
       <Dialog open={showShareNudge} onOpenChange={setShowShareNudge}>
         <DialogContent className="max-w-sm bg-card border-border">
           <DialogHeader>
-            <DialogTitle className="text-center">Share Your Day!</DialogTitle>
+            <DialogTitle className="text-center">Your Game, Captured.</DialogTitle>
           </DialogHeader>
           <div className="text-center py-4">
             <p className="text-muted-foreground">

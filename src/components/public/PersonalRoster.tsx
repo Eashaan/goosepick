@@ -31,6 +31,7 @@ const PersonalRoster = ({ courtId, players, matches, courtState }: PersonalRoste
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [showRankPopup, setShowRankPopup] = useState(false);
   const [showPodiumSummary, setShowPodiumSummary] = useState(false);
+  const [showAutoStatsCard, setShowAutoStatsCard] = useState(false);
 
   // Load saved player from localStorage
   useEffect(() => {
@@ -250,6 +251,8 @@ const PersonalRoster = ({ courtId, players, matches, courtState }: PersonalRoste
     if (selectedPlayerId) {
       localStorage.setItem(`gp_rank_popup_${courtId}_${selectedPlayerId}`, "true");
     }
+    // After rank popup closes, show auto stats card
+    setShowAutoStatsCard(true);
   };
 
   const handlePodiumSummaryClose = () => {
@@ -264,7 +267,9 @@ const PersonalRoster = ({ courtId, players, matches, courtState }: PersonalRoste
     return (
       <div className="space-y-6">
         <div className="text-center">
-          <h2 className="text-lg font-semibold mb-4">Who are you?</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Please select your name in the dropdown below
+          </p>
           <Select onValueChange={handlePlayerSelect}>
             <SelectTrigger className="w-full max-w-xs mx-auto h-14 text-lg bg-secondary rounded-xl">
               <SelectValue placeholder="Select your name" />
@@ -298,17 +303,15 @@ const PersonalRoster = ({ courtId, players, matches, courtState }: PersonalRoste
           <span className="text-sm text-muted-foreground">Playing as</span>
           <p className="text-lg font-semibold">{selectedPlayer?.name}</p>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
+        <button
           onClick={() => {
             setSelectedPlayerId(null);
             localStorage.removeItem(`gp_person_${courtId}`);
           }}
-          className="text-muted-foreground"
+          className="text-primary underline text-sm font-medium hover:text-primary/80 transition-colors"
         >
-          Change
-        </Button>
+          Change Player
+        </button>
       </div>
 
       {/* Nudge message */}
@@ -372,10 +375,20 @@ const PersonalRoster = ({ courtId, players, matches, courtState }: PersonalRoste
         </div>
       )}
 
-      {/* Stats Card Modal */}
+      {/* Manual Stats Card Modal */}
       <StatsCardModal
         open={showStatsCard}
         onOpenChange={setShowStatsCard}
+        playerId={selectedPlayerId}
+        playerName={selectedPlayer?.name || ""}
+        matches={matches}
+        players={players}
+      />
+
+      {/* Auto Stats Card Modal (after rank popup) */}
+      <StatsCardModal
+        open={showAutoStatsCard}
+        onOpenChange={setShowAutoStatsCard}
         playerId={selectedPlayerId}
         playerName={selectedPlayer?.name || ""}
         matches={matches}
