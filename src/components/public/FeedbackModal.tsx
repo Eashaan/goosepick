@@ -51,13 +51,31 @@ const FeedbackModal = ({
       });
 
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      toast.success("Thank you!");
+      
+      // Handle idempotent responses gracefully
+      if (data?.ok) {
+        if (data.status === 'submitted') {
+          toast.success("Thank you!");
+        } else if (data.status === 'already_submitted') {
+          toast.success("Feedback already received — thank you!");
+        }
+        onSubmitted();
+        onOpenChange(false);
+        return;
+      }
+      
+      // Only treat as error if ok is explicitly false
+      if (data?.ok === false && data?.error) {
+        throw new Error(data.error);
+      }
+      
+      // Fallback: unexpected response shape, but still close gracefully
       onSubmitted();
       onOpenChange(false);
     } catch (error: any) {
-      toast.error(error?.message || "Failed to submit feedback");
+      console.error('Feedback submission error:', error);
+      toast.error(error?.message || "Could not submit feedback. Try again.");
+      // Do NOT close modal on error - let user retry
     } finally {
       setIsSubmitting(false);
     }
