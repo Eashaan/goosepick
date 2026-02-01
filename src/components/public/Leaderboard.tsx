@@ -138,9 +138,9 @@ const Leaderboard = ({ matches, players }: LeaderboardProps) => {
     <>
       <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
         <Table>
-          <TableHeader className="sticky top-0 z-10 bg-background">
+          <TableHeader className="sticky top-0 z-30 bg-background">
             <TableRow className="border-border">
-              <TableHead className="sticky left-0 bg-background z-20 text-xs">Player</TableHead>
+              <TableHead className="sticky left-0 bg-background z-40 text-xs">Player</TableHead>
               <TableHead className="text-xs text-center bg-background">Matches</TableHead>
               <TableHead className="text-xs text-center bg-background">Wins</TableHead>
               <TableHead className="text-xs text-center bg-background">Win %</TableHead>
