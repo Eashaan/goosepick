@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import PageLayout from "@/components/layout/PageLayout";
+import GlobalHeader from "@/components/layout/GlobalHeader";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 
 const AdminDashboard = () => {
@@ -37,7 +38,8 @@ const AdminDashboard = () => {
 
   return (
     <PageLayout>
-      <div className="min-h-screen px-6 py-12">
+      <GlobalHeader />
+      <div className="min-h-screen px-6 py-8">
         <div className="mx-auto max-w-2xl">
           <div className="mb-10 text-center">
             <h1 className="text-3xl font-bold text-foreground">Admin Dashboard</h1>

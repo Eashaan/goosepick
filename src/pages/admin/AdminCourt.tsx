@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { ChevronLeft, ChevronDown, ChevronUp, Plus, Trash2, Edit2, Check, X, Info } from "lucide-react";
 import PageLayout from "@/components/layout/PageLayout";
+import GlobalHeader from "@/components/layout/GlobalHeader";
 import { Database } from "@/integrations/supabase/types";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 
@@ -401,7 +402,8 @@ const AdminCourt = () => {
 
   return (
     <PageLayout>
-      <div className="min-h-screen px-4 py-8 sm:px-6">
+      <GlobalHeader />
+      <div className="min-h-screen px-4 py-4 sm:px-6">
         <div className="mx-auto max-w-2xl">
           {/* Header */}
           <div className="mb-8 flex items-center gap-4">

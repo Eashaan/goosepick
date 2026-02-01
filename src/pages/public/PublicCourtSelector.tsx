@@ -1,23 +1,16 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import PageLayout from "@/components/layout/PageLayout";
-import goosepickLogo from "@/assets/goosepick-logo-white.png";
+import GlobalHeader from "@/components/layout/GlobalHeader";
 
 const PublicCourtSelector = () => {
   const courts = [1, 2, 3, 4, 5, 6, 7];
 
   return (
     <PageLayout>
-      <div className="min-h-screen px-6 py-12">
+      <GlobalHeader />
+      <div className="min-h-screen px-6 py-8">
         <div className="mx-auto max-w-2xl">
-          {/* Logo */}
-          <div className="mb-10 flex justify-center">
-            <img
-              src={goosepickLogo}
-              alt="Goosepick"
-              className="h-16 w-auto"
-            />
-          </div>
 
           <div className="mb-10 text-center">
             <h1 className="text-2xl font-bold text-foreground">Select Your Court</h1>

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import PageLayout from "@/components/layout/PageLayout";
+import GlobalHeader from "@/components/layout/GlobalHeader";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 
 const AdminLogin = () => {
@@ -53,6 +54,7 @@ const AdminLogin = () => {
 
   return (
     <PageLayout>
+      <GlobalHeader />
       <div className="flex min-h-screen flex-col items-center justify-center px-6">
         <div className="w-full max-w-sm space-y-8">
           <div className="text-center">
