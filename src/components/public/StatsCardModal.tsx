@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Download, X } from "lucide-react";
 import { Database } from "@/integrations/supabase/types";
 import { toast } from "sonner";
+import goosepickSocialLogo from "@/assets/goosepick-social-logo.png";
 
 type Match = Database["public"]["Tables"]["matches"]["Row"];
 type Player = Database["public"]["Tables"]["players"]["Row"];
@@ -125,13 +126,14 @@ const StatsCardModal = ({
             className="p-8 bg-black text-white"
             style={{ fontFamily: "Inter, sans-serif" }}
           >
-            {/* Header with logo placeholder */}
+            {/* Header with logo */}
             <div className="text-center mb-8">
-              {/* Logo placeholder - maintains aspect ratio */}
-              <div className="w-16 h-16 mx-auto mb-3 flex items-center justify-center">
-                <div className="w-full h-full bg-[#FF4200]/10 rounded-xl flex items-center justify-center">
-                  <span className="text-[#FF4200] text-2xl font-bold">GP</span>
-                </div>
+              <div className="w-20 h-20 mx-auto mb-3 flex items-center justify-center">
+                <img
+                  src={goosepickSocialLogo}
+                  alt="Goosepick Social"
+                  className="w-full h-full object-contain"
+                />
               </div>
               <h2 className="text-lg font-semibold text-[#FF4200] mb-1">
                 India's Most Happening Pickleball Experience

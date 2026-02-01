@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import PageLayout from "@/components/layout/PageLayout";
+import GlobalHeader from "@/components/layout/GlobalHeader";
 import CourtPulse from "@/components/public/CourtPulse";
 import PersonalRoster from "@/components/public/PersonalRoster";
 import Leaderboard from "@/components/public/Leaderboard";
@@ -107,8 +108,11 @@ const PublicCourt = () => {
   return (
     <PageLayout showFooter={false}>
       <div className="min-h-screen flex flex-col">
-        {/* Header */}
-        <div className="px-4 py-4 flex items-center gap-3 border-b border-border">
+        {/* Global Header with Logo */}
+        <GlobalHeader />
+        
+        {/* Court Title */}
+        <div className="px-4 py-3 flex items-center gap-3 border-b border-border">
           <Button asChild variant="ghost" size="icon" className="shrink-0">
             <Link to="/public">
               <ChevronLeft className="h-5 w-5" />
