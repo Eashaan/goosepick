@@ -100,6 +100,62 @@ export type Database = {
           },
         ]
       }
+      match_substitutions: {
+        Row: {
+          court_id: number
+          created_at: string
+          id: string
+          match_id: string
+          replaced_player_id: string
+          substitute_player_id: string
+        }
+        Insert: {
+          court_id: number
+          created_at?: string
+          id?: string
+          match_id: string
+          replaced_player_id: string
+          substitute_player_id: string
+        }
+        Update: {
+          court_id?: number
+          created_at?: string
+          id?: string
+          match_id?: string
+          replaced_player_id?: string
+          substitute_player_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_substitutions_court_id_fkey"
+            columns: ["court_id"]
+            isOneToOne: false
+            referencedRelation: "courts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "match_substitutions_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "match_substitutions_replaced_player_id_fkey"
+            columns: ["replaced_player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "match_substitutions_substitute_player_id_fkey"
+            columns: ["substitute_player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       matches: {
         Row: {
           completed_at: string | null
@@ -189,21 +245,27 @@ export type Database = {
       }
       players: {
         Row: {
+          added_by_admin: boolean
           court_id: number
           created_at: string
           id: string
+          is_guest: boolean
           name: string
         }
         Insert: {
+          added_by_admin?: boolean
           court_id: number
           created_at?: string
           id?: string
+          is_guest?: boolean
           name: string
         }
         Update: {
+          added_by_admin?: boolean
           court_id?: number
           created_at?: string
           id?: string
+          is_guest?: boolean
           name?: string
         }
         Relationships: [

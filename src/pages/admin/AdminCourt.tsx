@@ -9,14 +9,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronDown, ChevronUp, Plus, Trash2, Edit2, Check, X, Info } from "lucide-react";
 import PageLayout from "@/components/layout/PageLayout";
 import GlobalHeader from "@/components/layout/GlobalHeader";
 import { Database } from "@/integrations/supabase/types";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
+import PlayerSwapModal from "@/components/admin/PlayerSwapModal";
 
 type Match = Database["public"]["Tables"]["matches"]["Row"];
+type PlayerSlot = "team1_player1_id" | "team1_player2_id" | "team2_player1_id" | "team2_player2_id";
 
 interface RotationDiagnostics {
   player_count: number;
@@ -40,6 +43,54 @@ interface RotationResult {
   error?: string;
 }
 
+// Swappable player component for match display
+interface SwappablePlayerProps {
+  playerId: string | null;
+  playerName: string;
+  slot: PlayerSlot;
+  matchId: string;
+  matchStatus: string;
+  onSwap: (playerId: string, playerName: string, slot: PlayerSlot, matchId: string) => void;
+}
+
+const SwappablePlayer = ({
+  playerId,
+  playerName,
+  slot,
+  matchId,
+  matchStatus,
+  onSwap,
+}: SwappablePlayerProps) => {
+  const canSwap = matchStatus === "pending" && playerId;
+  
+  return (
+    <TooltipProvider>
+      <div className="flex items-center gap-1">
+        <span className="text-lg font-semibold">{playerName}</span>
+        {canSwap ? (
+          <button
+            onClick={() => onSwap(playerId, playerName, slot, matchId)}
+            className="text-xs text-primary underline hover:text-primary/80 transition-colors ml-1"
+          >
+            Swap
+          </button>
+        ) : matchStatus !== "pending" && playerId ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-xs text-muted-foreground/50 ml-1 cursor-not-allowed">
+                Swap
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Swaps are only allowed before the match starts</p>
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+      </div>
+    </TooltipProvider>
+  );
+};
+
 const AdminCourt = () => {
   const { courtId } = useParams();
   const navigate = useNavigate();
@@ -56,6 +107,15 @@ const AdminCourt = () => {
   const [overrideMatchId, setOverrideMatchId] = useState<string | null>(null);
   const [rotationDiagnostics, setRotationDiagnostics] = useState<RotationDiagnostics | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  
+  // Swap modal state
+  const [swapModalOpen, setSwapModalOpen] = useState(false);
+  const [swapTarget, setSwapTarget] = useState<{
+    playerId: string;
+    playerName: string;
+    slot: PlayerSlot;
+    matchId: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!authLoading && !isAdmin) {
@@ -118,6 +178,11 @@ const AdminCourt = () => {
         "postgres_changes",
         { event: "*", schema: "public", table: "court_state", filter: `court_id=eq.${courtNumber}` },
         () => queryClient.invalidateQueries({ queryKey: ["court_state", courtNumber] })
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "players", filter: `court_id=eq.${courtNumber}` },
+        () => queryClient.invalidateQueries({ queryKey: ["players", courtNumber] })
       )
       .subscribe();
 
@@ -623,10 +688,62 @@ const AdminCourt = () => {
                           }
                         </div>
                         {displayMatch && courtState?.phase !== "completed" ? (
-                          <div className="text-lg font-semibold">
-                            {getPlayerName(displayMatch.team1_player1_id)} & {getPlayerName(displayMatch.team1_player2_id)}
-                            <span className="mx-2 text-muted-foreground">vs</span>
-                            {getPlayerName(displayMatch.team2_player1_id)} & {getPlayerName(displayMatch.team2_player2_id)}
+                          <div className="space-y-3">
+                            {/* Team 1 */}
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <SwappablePlayer
+                                playerId={displayMatch.team1_player1_id}
+                                playerName={getPlayerName(displayMatch.team1_player1_id)}
+                                slot="team1_player1_id"
+                                matchId={displayMatch.id}
+                                matchStatus={displayMatch.status}
+                                onSwap={(playerId, playerName, slot, matchId) => {
+                                  setSwapTarget({ playerId, playerName, slot, matchId });
+                                  setSwapModalOpen(true);
+                                }}
+                              />
+                              <span className="text-muted-foreground">&</span>
+                              <SwappablePlayer
+                                playerId={displayMatch.team1_player2_id}
+                                playerName={getPlayerName(displayMatch.team1_player2_id)}
+                                slot="team1_player2_id"
+                                matchId={displayMatch.id}
+                                matchStatus={displayMatch.status}
+                                onSwap={(playerId, playerName, slot, matchId) => {
+                                  setSwapTarget({ playerId, playerName, slot, matchId });
+                                  setSwapModalOpen(true);
+                                }}
+                              />
+                            </div>
+                            
+                            <div className="text-center text-muted-foreground text-sm">vs</div>
+                            
+                            {/* Team 2 */}
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <SwappablePlayer
+                                playerId={displayMatch.team2_player1_id}
+                                playerName={getPlayerName(displayMatch.team2_player1_id)}
+                                slot="team2_player1_id"
+                                matchId={displayMatch.id}
+                                matchStatus={displayMatch.status}
+                                onSwap={(playerId, playerName, slot, matchId) => {
+                                  setSwapTarget({ playerId, playerName, slot, matchId });
+                                  setSwapModalOpen(true);
+                                }}
+                              />
+                              <span className="text-muted-foreground">&</span>
+                              <SwappablePlayer
+                                playerId={displayMatch.team2_player2_id}
+                                playerName={getPlayerName(displayMatch.team2_player2_id)}
+                                slot="team2_player2_id"
+                                matchId={displayMatch.id}
+                                matchStatus={displayMatch.status}
+                                onSwap={(playerId, playerName, slot, matchId) => {
+                                  setSwapTarget({ playerId, playerName, slot, matchId });
+                                  setSwapModalOpen(true);
+                                }}
+                              />
+                            </div>
                           </div>
                         ) : (
                           <div className="text-lg font-semibold text-primary">Court Completed</div>
@@ -842,6 +959,26 @@ const AdminCourt = () => {
               </Card>
             </TabsContent>
           </Tabs>
+          
+          {/* Player Swap Modal */}
+          {swapTarget && displayMatch && (
+            <PlayerSwapModal
+              open={swapModalOpen}
+              onOpenChange={setSwapModalOpen}
+              courtId={courtNumber}
+              matchId={swapTarget.matchId}
+              playerSlot={swapTarget.slot}
+              currentPlayerId={swapTarget.playerId}
+              currentPlayerName={swapTarget.playerName}
+              allPlayers={players}
+              matchPlayerIds={[
+                displayMatch.team1_player1_id,
+                displayMatch.team1_player2_id,
+                displayMatch.team2_player1_id,
+                displayMatch.team2_player2_id,
+              ]}
+            />
+          )}
         </div>
       </div>
     </PageLayout>
