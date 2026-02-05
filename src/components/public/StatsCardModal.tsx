@@ -115,7 +115,7 @@ const StatsCardModal = ({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-md bg-background border-border p-0 overflow-hidden">
+        <DialogContent className="max-w-[320px] sm:max-w-md bg-background border-border p-0 overflow-hidden">
           <DialogHeader className="sr-only">
             <DialogTitle>Your Stats Card</DialogTitle>
           </DialogHeader>
@@ -123,60 +123,60 @@ const StatsCardModal = ({
           {/* Stats Card Preview */}
           <div
             ref={cardRef}
-            className="p-8 bg-black text-white"
+            className="p-5 sm:p-8 bg-black text-white"
             style={{ fontFamily: "Inter, sans-serif" }}
           >
             {/* Header with logo */}
-            <div className="text-center mb-8">
-              <div className="w-20 h-20 mx-auto mb-3 flex items-center justify-center">
+            <div className="text-center mb-5 sm:mb-8">
+              <div className="w-14 h-14 sm:w-20 sm:h-20 mx-auto mb-2 sm:mb-3 flex items-center justify-center">
                 <img
                   src={goosepickSocialLogo}
                   alt="Goosepick Social"
                   className="w-full h-full object-contain"
                 />
               </div>
-              <h2 className="text-lg font-semibold text-[#FF4200] mb-1">
+              <h2 className="text-sm sm:text-lg font-semibold text-[#FF4200] mb-1">
                 India's Most Happening Pickleball Experience
               </h2>
-              <p className="text-sm text-gray-400">February 1, 2026</p>
+              <p className="text-xs sm:text-sm text-gray-400">February 1, 2026</p>
             </div>
 
             {/* Player Name Title */}
-            <div className="text-center mb-8">
-              <p className="text-2xl font-bold">{getPlayerNameTitle()}</p>
+            <div className="text-center mb-5 sm:mb-8">
+              <p className="text-xl sm:text-2xl font-bold">{getPlayerNameTitle()}</p>
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 gap-6 mb-8">
+            <div className="grid grid-cols-2 gap-4 sm:gap-6 mb-5 sm:mb-8">
               <div className="text-center">
-                <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Matches</p>
-                <p className="text-2xl font-bold">{stats.matchesPlayed}</p>
+                <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wide mb-0.5 sm:mb-1">Matches</p>
+                <p className="text-xl sm:text-2xl font-bold">{stats.matchesPlayed}</p>
               </div>
               <div className="text-center">
-                <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Wins</p>
-                <p className="text-2xl font-bold">{stats.wins}</p>
+                <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wide mb-0.5 sm:mb-1">Wins</p>
+                <p className="text-xl sm:text-2xl font-bold">{stats.wins}</p>
               </div>
               <div className="text-center">
-                <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Win Rate</p>
-                <p className="text-2xl font-bold">{stats.winPercentage.toFixed(0)}%</p>
+                <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wide mb-0.5 sm:mb-1">Win Rate</p>
+                <p className="text-xl sm:text-2xl font-bold">{stats.winPercentage.toFixed(0)}%</p>
               </div>
               <div className="text-center">
-                <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Avg. Point Diff.</p>
-                <p className="text-2xl font-bold">
+                <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wide mb-0.5 sm:mb-1">Avg. Point Diff.</p>
+                <p className="text-xl sm:text-2xl font-bold">
                   {stats.avgPointDiff > 0 ? "+" : ""}{stats.avgPointDiff.toFixed(1)}
                 </p>
               </div>
             </div>
 
             {/* Performance Index */}
-            <div className="text-center p-4 rounded-xl bg-[#FF4200]/10 border border-[#FF4200]/30">
-              <p className="text-xs text-[#FF4200] uppercase tracking-wide mb-1">Performance Index</p>
-              <p className="text-4xl font-bold text-[#FF4200]">{stats.performanceIndex.toFixed(1)}</p>
+            <div className="text-center p-3 sm:p-4 rounded-xl bg-[#FF4200]/10 border border-[#FF4200]/30">
+              <p className="text-[10px] sm:text-xs text-[#FF4200] uppercase tracking-wide mb-0.5 sm:mb-1">Performance Index</p>
+              <p className="text-3xl sm:text-4xl font-bold text-[#FF4200]">{stats.performanceIndex.toFixed(1)}</p>
             </div>
 
             {/* Footer */}
-            <div className="text-center mt-8 pt-4 border-t border-gray-800">
-              <p className="text-base font-medium text-white">@goosepickleball</p>
+            <div className="text-center mt-5 sm:mt-8 pt-3 sm:pt-4 border-t border-gray-800">
+              <p className="text-sm sm:text-base font-medium text-white">@goosepickleball</p>
             </div>
           </div>
 
