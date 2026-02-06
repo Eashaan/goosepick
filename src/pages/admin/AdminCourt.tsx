@@ -14,9 +14,12 @@ import { toast } from "sonner";
 import { ChevronLeft, ChevronDown, ChevronUp, Plus, Trash2, Edit2, Check, X, Info } from "lucide-react";
 import PageLayout from "@/components/layout/PageLayout";
 import GlobalHeader from "@/components/layout/GlobalHeader";
+import FormatSelector from "@/components/admin/FormatSelector";
 import { Database } from "@/integrations/supabase/types";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import PlayerSwapModal from "@/components/admin/PlayerSwapModal";
+
+type FormatType = "mystery_partner" | "round_robin" | "format_3" | "format_4" | "format_5";
 
 type Match = Database["public"]["Tables"]["matches"]["Row"];
 type PlayerSlot = "team1_player1_id" | "team1_player2_id" | "team2_player1_id" | "team2_player2_id";
@@ -122,6 +125,23 @@ const AdminCourt = () => {
       navigate("/admin/login");
     }
   }, [authLoading, isAdmin, navigate]);
+
+  // Fetch court details (for format_type)
+  const { data: courtDetails } = useQuery({
+    queryKey: ["court_details", courtNumber],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("courts")
+        .select("*")
+        .eq("id", courtNumber)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const currentFormat: FormatType = (courtDetails?.format_type as FormatType) || "mystery_partner";
+  const isFormatEnabled = currentFormat === "mystery_partner";
 
   // Fetch players for this court
   const { data: players = [], isLoading: playersLoading } = useQuery({
@@ -422,6 +442,24 @@ const AdminCourt = () => {
     },
   });
 
+  // Update format mutation
+  const updateFormat = useMutation({
+    mutationFn: async (newFormat: FormatType) => {
+      const { error } = await supabase
+        .from("courts")
+        .update({ format_type: newFormat })
+        .eq("id", courtNumber);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["court_details", courtNumber] });
+      toast.success("Format updated");
+    },
+    onError: () => {
+      toast.error("Failed to update format");
+    },
+  });
+
   const handleAddPlayer = (e: React.FormEvent) => {
     e.preventDefault();
     if (newPlayerName.trim() && players.length < 12) {
@@ -477,7 +515,16 @@ const AdminCourt = () => {
                 <ChevronLeft className="h-6 w-6" />
               </Link>
             </Button>
-            <h1 className="text-2xl font-bold">Court {courtNumber}</h1>
+            <h1 className="text-2xl font-bold">{courtDetails?.name || `Court ${courtNumber}`}</h1>
+          </div>
+
+          {/* Format Selector - At the very top */}
+          <div className="mb-6">
+            <FormatSelector
+              currentFormat={currentFormat}
+              onFormatChange={(format) => updateFormat.mutate(format)}
+              disabled={hasRotation}
+            />
           </div>
 
           {/* Admin Tabs */}
@@ -499,6 +546,19 @@ const AdminCourt = () => {
 
             {/* Live Scoring Inputs Tab */}
             <TabsContent value="scoring" className="space-y-6">
+              {/* Format Disabled Overlay */}
+              {!isFormatEnabled ? (
+                <Card className="bg-muted/50 border-border">
+                  <CardContent className="py-12 text-center">
+                    <div className="text-muted-foreground space-y-2">
+                      <p className="text-lg font-medium">Format Not Available</p>
+                      <p className="text-sm">This format will be available soon.</p>
+                      <p className="text-xs">Select "Mystery Partner" to use the full feature set.</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
               {/* Players Section (Collapsible) */}
               <Collapsible open={playersOpen} onOpenChange={setPlayersOpen}>
                 <Card className="bg-card border-border">
@@ -884,6 +944,8 @@ const AdminCourt = () => {
                   )}
                 </CardContent>
               </Card>
+                </>
+              )}
             </TabsContent>
 
             {/* Court Roster Tab */}

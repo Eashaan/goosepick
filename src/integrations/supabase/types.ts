@@ -45,15 +45,63 @@ export type Database = {
       }
       courts: {
         Row: {
+          event_id: string | null
+          format_type: Database["public"]["Enums"]["format_type"]
           id: number
+          location_id: string | null
           name: string
         }
         Insert: {
+          event_id?: string | null
+          format_type?: Database["public"]["Enums"]["format_type"]
           id?: number
+          location_id?: string | null
           name: string
         }
         Update: {
+          event_id?: string | null
+          format_type?: Database["public"]["Enums"]["format_type"]
           id?: number
+          location_id?: string | null
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "courts_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "courts_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      events: {
+        Row: {
+          active: boolean
+          created_at: string
+          event_type: Database["public"]["Enums"]["event_type"]
+          id: string
+          name: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          event_type?: Database["public"]["Enums"]["event_type"]
+          id?: string
+          name: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          event_type?: Database["public"]["Enums"]["event_type"]
+          id?: string
           name?: string
         }
         Relationships: []
@@ -96,6 +144,38 @@ export type Database = {
             columns: ["player_id"]
             isOneToOne: false
             referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      locations: {
+        Row: {
+          active: boolean
+          created_at: string
+          event_id: string
+          id: string
+          name: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          event_id: string
+          id?: string
+          name: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          event_id?: string
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "locations_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
             referencedColumns: ["id"]
           },
         ]
@@ -313,7 +393,14 @@ export type Database = {
     Enums: {
       app_role: "admin"
       court_phase: "idle" | "in_progress" | "completed"
+      event_type: "one_off" | "recurring"
       feedback_rating: "loved" | "good" | "okay"
+      format_type:
+        | "mystery_partner"
+        | "round_robin"
+        | "format_3"
+        | "format_4"
+        | "format_5"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -443,7 +530,15 @@ export const Constants = {
     Enums: {
       app_role: ["admin"],
       court_phase: ["idle", "in_progress", "completed"],
+      event_type: ["one_off", "recurring"],
       feedback_rating: ["loved", "good", "okay"],
+      format_type: [
+        "mystery_partner",
+        "round_robin",
+        "format_3",
+        "format_4",
+        "format_5",
+      ],
     },
   },
 } as const
