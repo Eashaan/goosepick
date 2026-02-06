@@ -58,6 +58,22 @@ const PublicCourt = () => {
     },
   });
 
+  // Fetch court details for display name
+  const { data: courtDetails } = useQuery({
+    queryKey: ["court_details", courtNumber],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("courts")
+        .select("*")
+        .eq("id", courtNumber)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const courtName = courtDetails?.name || `Court ${courtNumber}`;
+
   // Set up realtime subscriptions
   useEffect(() => {
     const channel = supabase
@@ -118,7 +134,7 @@ const PublicCourt = () => {
               <ChevronLeft className="h-5 w-5" />
             </Link>
           </Button>
-          <h1 className="text-lg font-semibold">Court {courtNumber}</h1>
+          <h1 className="text-lg font-semibold">{courtName}</h1>
         </div>
 
         {/* Court Pulse */}

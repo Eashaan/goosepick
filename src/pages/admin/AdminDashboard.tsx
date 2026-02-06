@@ -1,13 +1,28 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { ChevronLeft } from "lucide-react";
 import PageLayout from "@/components/layout/PageLayout";
 import GlobalHeader from "@/components/layout/GlobalHeader";
+import EventSelector from "@/components/EventSelector";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
+import { useEventContext, GOOSEPICK_SOCIAL_ID } from "@/hooks/useEventContext";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const { isAdmin, isLoading, signOut, user } = useAdminAuth();
+  const {
+    selectedEventId,
+    selectedLocationId,
+    selectedEvent,
+    selectedLocation,
+    requiresLocation,
+    clearSelection,
+  } = useEventContext();
+  
+  const [showCourts, setShowCourts] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !isAdmin) {
@@ -15,10 +30,49 @@ const AdminDashboard = () => {
     }
   }, [isLoading, isAdmin, navigate]);
 
+  // Reset to event selection when mounting
+  useEffect(() => {
+    setShowCourts(false);
+  }, []);
+
   const handleLogout = async () => {
     await signOut();
+    clearSelection();
     navigate("/");
   };
+
+  const handleEventSelectionComplete = () => {
+    setShowCourts(true);
+  };
+
+  const handleBackToEvents = () => {
+    setShowCourts(false);
+    clearSelection();
+  };
+
+  // Fetch courts for the selected event/location
+  const { data: courts = [] } = useQuery({
+    queryKey: ["courts", selectedEventId, selectedLocationId],
+    queryFn: async () => {
+      let query = supabase.from("courts").select("*").order("id");
+      
+      if (selectedEventId) {
+        query = query.eq("event_id", selectedEventId);
+      }
+      
+      if (selectedLocationId) {
+        query = query.eq("location_id", selectedLocationId);
+      } else if (selectedEventId && !requiresLocation) {
+        // For non-recurring events (like Goosepick Social), location is null
+        query = query.is("location_id", null);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data;
+    },
+    enabled: showCourts && !!selectedEventId,
+  });
 
   if (isLoading) {
     return (
@@ -34,47 +88,92 @@ const AdminDashboard = () => {
     return null;
   }
 
-  const courts = [1, 2, 3, 4, 5, 6, 7];
+  // Build the context label
+  const contextLabel = selectedEvent
+    ? selectedLocation
+      ? `${selectedEvent.name} – ${selectedLocation.name}`
+      : selectedEvent.name
+    : "";
 
   return (
     <PageLayout>
       <GlobalHeader />
       <div className="min-h-screen px-6 py-8">
         <div className="mx-auto max-w-2xl">
-          <div className="mb-10 text-center">
-            <h1 className="text-3xl font-bold text-foreground">Admin Dashboard</h1>
-            <p className="mt-2 text-muted-foreground">Select a court to manage</p>
-            {user?.email && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                Signed in as {user.email}
-              </p>
-            )}
-          </div>
+          {!showCourts ? (
+            <>
+              <div className="mb-10 text-center">
+                <h1 className="text-3xl font-bold text-foreground">Admin Dashboard</h1>
+                <p className="mt-2 text-muted-foreground">Select an event to manage</p>
+                {user?.email && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Signed in as {user.email}
+                  </p>
+                )}
+              </div>
 
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-            {courts.map((courtId) => (
-              <Button
-                key={courtId}
-                asChild
-                variant="secondary"
-                className="h-24 text-xl font-semibold rounded-2xl hover:bg-primary hover:text-primary-foreground transition-all duration-200"
-              >
-                <Link to={`/admin/court/${courtId}`}>
-                  Court {courtId}
-                </Link>
-              </Button>
-            ))}
-          </div>
+              <EventSelector onComplete={handleEventSelectionComplete} />
 
-          <div className="mt-12 text-center">
-            <Button
-              variant="ghost"
-              onClick={handleLogout}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              Logout
-            </Button>
-          </div>
+              <div className="mt-12 text-center">
+                <Button
+                  variant="ghost"
+                  onClick={handleLogout}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Logout
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Header with back button */}
+              <div className="mb-8 flex items-center gap-4">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleBackToEvents}
+                  className="shrink-0"
+                >
+                  <ChevronLeft className="h-6 w-6" />
+                </Button>
+                <div>
+                  <h1 className="text-2xl font-bold text-foreground">Select Court</h1>
+                  <p className="text-sm text-muted-foreground">{contextLabel}</p>
+                </div>
+              </div>
+
+              {/* Courts Grid */}
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+                {courts.map((court) => (
+                  <Button
+                    key={court.id}
+                    asChild
+                    variant="secondary"
+                    className="h-24 text-xl font-semibold rounded-2xl hover:bg-primary hover:text-primary-foreground transition-all duration-200"
+                  >
+                    <Link to={`/admin/court/${court.id}`}>
+                      {court.name}
+                    </Link>
+                  </Button>
+                ))}
+                {courts.length === 0 && (
+                  <div className="col-span-full text-center py-12 text-muted-foreground">
+                    No courts found for this event/location.
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-12 text-center">
+                <Button
+                  variant="ghost"
+                  onClick={handleLogout}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Logout
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </PageLayout>
