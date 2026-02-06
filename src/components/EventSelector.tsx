@@ -92,7 +92,7 @@ const EventSelector = ({ onComplete }: EventSelectorProps) => {
             onClick={onComplete}
             className="w-full h-14 text-lg font-semibold rounded-xl"
           >
-            Continue to Courts
+            Continue to Roster
           </Button>
         </div>
       )}
