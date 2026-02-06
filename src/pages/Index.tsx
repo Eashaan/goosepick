@@ -7,7 +7,6 @@ import goosepickExperiencesLogo from "@/assets/goosepick-experiences-logo.png";
 const Index = () => {
   const navigate = useNavigate();
   const {
-    events,
     locations,
     selectedEventId,
     selectedLocationId,
@@ -55,7 +54,7 @@ const Index = () => {
   }
 
   return (
-    <PageLayout>
+    <PageLayout showFooter={false}>
       <div className="flex min-h-screen flex-col items-center justify-center px-6">
         {/* Logo - Fixed aspect ratio container */}
         <div className="mb-12 animate-fade-in flex-shrink-0">
