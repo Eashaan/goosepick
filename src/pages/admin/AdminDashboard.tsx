@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,9 +6,8 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft } from "lucide-react";
 import PageLayout from "@/components/layout/PageLayout";
 import GlobalHeader from "@/components/layout/GlobalHeader";
-import EventSelector from "@/components/EventSelector";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
-import { useEventContext, GOOSEPICK_SOCIAL_ID } from "@/hooks/useEventContext";
+import { useEventContext } from "@/hooks/useEventContext";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -21,8 +20,6 @@ const AdminDashboard = () => {
     requiresLocation,
     clearSelection,
   } = useEventContext();
-  
-  const [showCourts, setShowCourts] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !isAdmin) {
@@ -30,10 +27,12 @@ const AdminDashboard = () => {
     }
   }, [isLoading, isAdmin, navigate]);
 
-  // Reset to event selection when mounting
+  // Redirect to home if no event selected
   useEffect(() => {
-    setShowCourts(false);
-  }, []);
+    if (!isLoading && isAdmin && !selectedEventId) {
+      navigate("/");
+    }
+  }, [isLoading, isAdmin, selectedEventId, navigate]);
 
   const handleLogout = async () => {
     await signOut();
@@ -41,13 +40,9 @@ const AdminDashboard = () => {
     navigate("/");
   };
 
-  const handleEventSelectionComplete = () => {
-    setShowCourts(true);
-  };
-
-  const handleBackToEvents = () => {
-    setShowCourts(false);
+  const handleBackToHome = () => {
     clearSelection();
+    navigate("/");
   };
 
   // Fetch courts for the selected event/location
@@ -71,7 +66,7 @@ const AdminDashboard = () => {
       if (error) throw error;
       return data;
     },
-    enabled: showCourts && !!selectedEventId,
+    enabled: !!selectedEventId,
   });
 
   if (isLoading) {
@@ -84,7 +79,7 @@ const AdminDashboard = () => {
     );
   }
 
-  if (!isAdmin) {
+  if (!isAdmin || !selectedEventId) {
     return null;
   }
 
@@ -100,80 +95,57 @@ const AdminDashboard = () => {
       <GlobalHeader />
       <div className="min-h-screen px-6 py-8">
         <div className="mx-auto max-w-2xl">
-          {!showCourts ? (
-            <>
-              <div className="mb-10 text-center">
-                <h1 className="text-3xl font-bold text-foreground">Admin Dashboard</h1>
-                <p className="mt-2 text-muted-foreground">Select an event to manage</p>
-                {user?.email && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Signed in as {user.email}
-                  </p>
-                )}
-              </div>
+          {/* Header with back button */}
+          <div className="mb-8 flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleBackToHome}
+              className="shrink-0"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Admin Dashboard</h1>
+              <p className="text-sm text-muted-foreground">{contextLabel}</p>
+              {user?.email && (
+                <p className="text-xs text-muted-foreground">
+                  Signed in as {user.email}
+                </p>
+              )}
+            </div>
+          </div>
 
-              <EventSelector onComplete={handleEventSelectionComplete} />
+          {/* Courts Grid */}
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+            {courts.map((court) => (
+              <Button
+                key={court.id}
+                asChild
+                variant="secondary"
+                className="h-24 text-xl font-semibold rounded-2xl hover:bg-primary hover:text-primary-foreground transition-all duration-200"
+              >
+                <Link to={`/admin/court/${court.id}`}>
+                  {court.name}
+                </Link>
+              </Button>
+            ))}
+            {courts.length === 0 && (
+              <div className="col-span-full text-center py-12 text-muted-foreground">
+                No courts found for this event/location.
+              </div>
+            )}
+          </div>
 
-              <div className="mt-12 text-center">
-                <Button
-                  variant="ghost"
-                  onClick={handleLogout}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  Logout
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
-              {/* Header with back button */}
-              <div className="mb-8 flex items-center gap-4">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleBackToEvents}
-                  className="shrink-0"
-                >
-                  <ChevronLeft className="h-6 w-6" />
-                </Button>
-                <div>
-                  <h1 className="text-2xl font-bold text-foreground">Select Court</h1>
-                  <p className="text-sm text-muted-foreground">{contextLabel}</p>
-                </div>
-              </div>
-
-              {/* Courts Grid */}
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-                {courts.map((court) => (
-                  <Button
-                    key={court.id}
-                    asChild
-                    variant="secondary"
-                    className="h-24 text-xl font-semibold rounded-2xl hover:bg-primary hover:text-primary-foreground transition-all duration-200"
-                  >
-                    <Link to={`/admin/court/${court.id}`}>
-                      {court.name}
-                    </Link>
-                  </Button>
-                ))}
-                {courts.length === 0 && (
-                  <div className="col-span-full text-center py-12 text-muted-foreground">
-                    No courts found for this event/location.
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-12 text-center">
-                <Button
-                  variant="ghost"
-                  onClick={handleLogout}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  Logout
-                </Button>
-              </div>
-            </>
-          )}
+          <div className="mt-12 text-center">
+            <Button
+              variant="ghost"
+              onClick={handleLogout}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              Logout
+            </Button>
+          </div>
         </div>
       </div>
     </PageLayout>
