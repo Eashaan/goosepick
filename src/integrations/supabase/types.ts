@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      cities: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       court_state: {
         Row: {
           court_id: number
@@ -85,6 +106,7 @@ export type Database = {
       events: {
         Row: {
           active: boolean
+          city_id: string | null
           created_at: string
           event_type: Database["public"]["Enums"]["event_type"]
           id: string
@@ -92,6 +114,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          city_id?: string | null
           created_at?: string
           event_type?: Database["public"]["Enums"]["event_type"]
           id?: string
@@ -99,12 +122,21 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          city_id?: string | null
           created_at?: string
           event_type?: Database["public"]["Enums"]["event_type"]
           id?: string
           name?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "events_city_id_fkey"
+            columns: ["city_id"]
+            isOneToOne: false
+            referencedRelation: "cities"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       feedback: {
         Row: {
@@ -151,6 +183,7 @@ export type Database = {
       locations: {
         Row: {
           active: boolean
+          city_id: string | null
           created_at: string
           event_id: string
           id: string
@@ -158,6 +191,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          city_id?: string | null
           created_at?: string
           event_id: string
           id?: string
@@ -165,12 +199,20 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          city_id?: string | null
           created_at?: string
           event_id?: string
           id?: string
           name?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "locations_city_id_fkey"
+            columns: ["city_id"]
+            isOneToOne: false
+            referencedRelation: "cities"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "locations_event_id_fkey"
             columns: ["event_id"]

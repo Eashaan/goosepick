@@ -1,5 +1,12 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import PageLayout from "@/components/layout/PageLayout";
 import { useEventContext, GOOSEPICK_SOCIAL_ID, GOOSEPICK_THURSDAYS_ID } from "@/hooks/useEventContext";
 import goosepickExperiencesLogo from "@/assets/goosepick-experiences-logo.png";
@@ -7,26 +14,27 @@ import goosepickExperiencesLogo from "@/assets/goosepick-experiences-logo.png";
 const Index = () => {
   const navigate = useNavigate();
   const {
+    cities,
     locations,
+    selectedCityId,
     selectedEventId,
     selectedLocationId,
+    setSelectedCityId,
     setSelectedEventId,
     setSelectedLocationId,
     requiresLocation,
     isLoading,
   } = useEventContext();
 
-  // Filter locations for Thursdays event, sorted with Bandra first
+  // Filter locations for Thursdays event in selected city, sorted Bandra first
   const thursdaysLocations = locations
     .filter((l) => l.event_id === GOOSEPICK_THURSDAYS_ID)
     .sort((a, b) => {
-      // Bandra first, Andheri second
       if (a.name.toLowerCase().includes("bandra")) return -1;
       if (b.name.toLowerCase().includes("bandra")) return 1;
       return a.name.localeCompare(b.name);
     });
 
-  // Check if we can show CTAs
   const canShowCtas = selectedEventId && (!requiresLocation || selectedLocationId);
 
   const handleContinueToRoster = () => {
@@ -39,13 +47,12 @@ const Index = () => {
 
   const handleEventSelect = (eventId: string) => {
     setSelectedEventId(eventId);
-    // Clear location when switching events
     setSelectedLocationId(null);
   };
 
   if (isLoading) {
     return (
-      <PageLayout>
+      <PageLayout showFooter={false}>
         <div className="flex min-h-screen items-center justify-center">
           <div className="text-muted-foreground">Loading...</div>
         </div>
@@ -55,8 +62,24 @@ const Index = () => {
 
   return (
     <PageLayout showFooter={false}>
-      <div className="flex min-h-screen flex-col items-center justify-center px-6">
-        {/* Logo - Fixed aspect ratio container */}
+      <div className="flex min-h-screen flex-col items-center justify-center px-6 relative">
+        {/* City Selector - Top Right */}
+        <div className="absolute top-6 right-6">
+          <Select value={selectedCityId} onValueChange={setSelectedCityId}>
+            <SelectTrigger className="w-[130px] h-9 text-sm bg-secondary border-border rounded-lg">
+              <SelectValue placeholder="City" />
+            </SelectTrigger>
+            <SelectContent>
+              {cities.map((city) => (
+                <SelectItem key={city.id} value={city.id}>
+                  {city.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Logo */}
         <div className="mb-12 animate-fade-in flex-shrink-0">
           <div className="w-48 h-48 md:w-64 md:h-64">
             <img
@@ -120,10 +143,9 @@ const Index = () => {
             </div>
           )}
 
-          {/* CTAs - Only show after valid selection */}
+          {/* CTAs */}
           {canShowCtas && (
             <div className="flex flex-col items-center gap-4 pt-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              {/* Primary CTA */}
               <Button
                 size="lg"
                 className="min-w-[280px] h-14 text-lg font-semibold rounded-2xl bg-primary hover:bg-primary/90 shadow-glow hover:shadow-glow-lg transition-all duration-300"
@@ -131,8 +153,6 @@ const Index = () => {
               >
                 Continue to Roster
               </Button>
-
-              {/* Secondary CTA - Admin Login */}
               <button
                 onClick={handleAdminLogin}
                 className="text-primary hover:text-primary/80 underline underline-offset-4 text-sm font-medium transition-colors"
