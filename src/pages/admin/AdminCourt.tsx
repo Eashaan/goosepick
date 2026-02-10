@@ -102,6 +102,7 @@ const AdminCourt = () => {
   const queryClient = useQueryClient();
   const courtNumber = parseInt(courtId || "1");
   const { isAdmin, isLoading: authLoading } = useAdminAuth();
+  const { isValidating } = useCourtContextGuard(courtNumber);
 
   const [newPlayerName, setNewPlayerName] = useState("");
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
