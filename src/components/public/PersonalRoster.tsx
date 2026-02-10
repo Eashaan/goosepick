@@ -344,7 +344,7 @@ const PersonalRoster = ({ courtId, players, matches, courtState }: PersonalRoste
           <CollapsibleTrigger asChild>
             <CardHeader className="cursor-pointer flex flex-row items-center justify-between">
               <CardTitle className="text-base">
-                Your Goosepick Social – February 1, 2026
+                Your Stats
               </CardTitle>
               <ChevronDown className={`h-5 w-5 transition-transform ${statsOpen ? "rotate-180" : ""}`} />
             </CardHeader>

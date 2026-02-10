@@ -14,9 +14,11 @@ import { toast } from "sonner";
 import { ChevronLeft, ChevronDown, ChevronUp, Plus, Trash2, Edit2, Check, X, Info } from "lucide-react";
 import PageLayout from "@/components/layout/PageLayout";
 import GlobalHeader from "@/components/layout/GlobalHeader";
+import AdminContextBanner from "@/components/admin/AdminContextBanner";
 import FormatSelector from "@/components/admin/FormatSelector";
 import { Database } from "@/integrations/supabase/types";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
+import { useCourtContextGuard } from "@/hooks/useCourtContextGuard";
 import PlayerSwapModal from "@/components/admin/PlayerSwapModal";
 
 type FormatType = "mystery_partner" | "round_robin" | "format_3" | "format_4" | "format_5";
