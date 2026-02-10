@@ -539,6 +539,7 @@ const AdminCourt = () => {
               currentFormat={currentFormat}
               onFormatChange={(format) => updateFormat.mutate(format)}
               disabled={hasRotation}
+              hasMatches={hasRotation}
             />
           </div>
 
