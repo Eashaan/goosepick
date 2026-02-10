@@ -14,9 +14,11 @@ import { toast } from "sonner";
 import { ChevronLeft, ChevronDown, ChevronUp, Plus, Trash2, Edit2, Check, X, Info } from "lucide-react";
 import PageLayout from "@/components/layout/PageLayout";
 import GlobalHeader from "@/components/layout/GlobalHeader";
+import AdminContextBanner from "@/components/admin/AdminContextBanner";
 import FormatSelector from "@/components/admin/FormatSelector";
 import { Database } from "@/integrations/supabase/types";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
+import { useCourtContextGuard } from "@/hooks/useCourtContextGuard";
 import PlayerSwapModal from "@/components/admin/PlayerSwapModal";
 
 type FormatType = "mystery_partner" | "round_robin" | "format_3" | "format_4" | "format_5";
@@ -100,6 +102,7 @@ const AdminCourt = () => {
   const queryClient = useQueryClient();
   const courtNumber = parseInt(courtId || "1");
   const { isAdmin, isLoading: authLoading } = useAdminAuth();
+  const { isValidating } = useCourtContextGuard(courtNumber);
 
   const [newPlayerName, setNewPlayerName] = useState("");
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
@@ -503,9 +506,21 @@ const AdminCourt = () => {
     }
   };
 
+  if (authLoading || isValidating) {
+    return (
+      <PageLayout>
+        <GlobalHeader />
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="text-muted-foreground">Loading...</div>
+        </div>
+      </PageLayout>
+    );
+  }
+
   return (
     <PageLayout>
       <GlobalHeader />
+      <AdminContextBanner courtName={courtDetails?.name || `Court ${courtNumber}`} />
       <div className="min-h-screen px-4 py-4 sm:px-6">
         <div className="mx-auto max-w-2xl">
           {/* Header */}
@@ -524,6 +539,7 @@ const AdminCourt = () => {
               currentFormat={currentFormat}
               onFormatChange={(format) => updateFormat.mutate(format)}
               disabled={hasRotation}
+              hasMatches={hasRotation}
             />
           </div>
 

@@ -1,6 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Lock } from "lucide-react";
 
 type FormatType = "mystery_partner" | "round_robin" | "format_3" | "format_4" | "format_5";
 
@@ -8,6 +8,7 @@ interface FormatSelectorProps {
   currentFormat: FormatType;
   onFormatChange: (format: FormatType) => void;
   disabled?: boolean;
+  hasMatches?: boolean;
 }
 
 const FORMAT_OPTIONS: { value: FormatType; label: string; enabled: boolean }[] = [
@@ -18,9 +19,10 @@ const FORMAT_OPTIONS: { value: FormatType; label: string; enabled: boolean }[] =
   { value: "format_5", label: "Format 5", enabled: false },
 ];
 
-const FormatSelector = ({ currentFormat, onFormatChange, disabled }: FormatSelectorProps) => {
+const FormatSelector = ({ currentFormat, onFormatChange, disabled, hasMatches }: FormatSelectorProps) => {
   const selectedFormat = FORMAT_OPTIONS.find((f) => f.value === currentFormat);
   const isFormatEnabled = selectedFormat?.enabled ?? false;
+  const isLocked = hasMatches || disabled;
 
   return (
     <Card className="bg-card border-border">
@@ -32,7 +34,7 @@ const FormatSelector = ({ currentFormat, onFormatChange, disabled }: FormatSelec
           <Select
             value={currentFormat}
             onValueChange={(value) => onFormatChange(value as FormatType)}
-            disabled={disabled}
+            disabled={isLocked}
           >
             <SelectTrigger className="w-full sm:w-[200px]">
               <SelectValue />
@@ -57,8 +59,16 @@ const FormatSelector = ({ currentFormat, onFormatChange, disabled }: FormatSelec
           </Select>
         </div>
         
+        {/* Locked message when matches exist */}
+        {hasMatches && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
+            <Lock className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>Format cannot be changed once matches are generated.</span>
+          </div>
+        )}
+
         {/* Helper text when non-Mystery Partner format is selected */}
-        {!isFormatEnabled && (
+        {!hasMatches && !isFormatEnabled && (
           <div className="mt-3 flex items-start gap-2 rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <span>This format will be available soon.</span>

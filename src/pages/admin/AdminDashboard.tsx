@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft } from "lucide-react";
 import PageLayout from "@/components/layout/PageLayout";
 import GlobalHeader from "@/components/layout/GlobalHeader";
+import AdminContextBanner from "@/components/admin/AdminContextBanner";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useEventContext } from "@/hooks/useEventContext";
 
@@ -18,6 +19,7 @@ const AdminDashboard = () => {
     selectedEvent,
     selectedLocation,
     requiresLocation,
+    isContextValid,
     clearSelection,
   } = useEventContext();
 
@@ -27,12 +29,12 @@ const AdminDashboard = () => {
     }
   }, [isLoading, isAdmin, navigate]);
 
-  // Redirect to home if no event selected
+  // Redirect to home if context is invalid
   useEffect(() => {
-    if (!isLoading && isAdmin && !selectedEventId) {
-      navigate("/");
+    if (!isLoading && isAdmin && !isContextValid) {
+      navigate("/", { replace: true });
     }
-  }, [isLoading, isAdmin, selectedEventId, navigate]);
+  }, [isLoading, isAdmin, isContextValid, navigate]);
 
   const handleLogout = async () => {
     await signOut();
@@ -58,7 +60,6 @@ const AdminDashboard = () => {
       if (selectedLocationId) {
         query = query.eq("location_id", selectedLocationId);
       } else if (selectedEventId && !requiresLocation) {
-        // For non-recurring events (like Goosepick Social), location is null
         query = query.is("location_id", null);
       }
 
@@ -66,7 +67,7 @@ const AdminDashboard = () => {
       if (error) throw error;
       return data;
     },
-    enabled: !!selectedEventId,
+    enabled: isContextValid,
   });
 
   if (isLoading) {
@@ -79,7 +80,7 @@ const AdminDashboard = () => {
     );
   }
 
-  if (!isAdmin || !selectedEventId) {
+  if (!isAdmin || !isContextValid) {
     return null;
   }
 
@@ -93,6 +94,7 @@ const AdminDashboard = () => {
   return (
     <PageLayout>
       <GlobalHeader />
+      <AdminContextBanner />
       <div className="min-h-screen px-6 py-8">
         <div className="mx-auto max-w-2xl">
           {/* Header with back button */}

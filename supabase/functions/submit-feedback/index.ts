@@ -13,11 +13,11 @@ Deno.serve(async (req) => {
   try {
     const { court_id, player_id, rating, note } = await req.json();
 
-    // Validate required fields
+    // Validate required fields — return 200 with ok:false
     if (!court_id || !player_id || !rating) {
       return new Response(
         JSON.stringify({ ok: false, error: 'Missing required fields: court_id, player_id, rating' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
     if (!validRatings.includes(rating)) {
       return new Response(
         JSON.stringify({ ok: false, error: 'Invalid rating. Must be: loved, good, or okay' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -34,15 +34,15 @@ Deno.serve(async (req) => {
     if (note && typeof note === 'string' && note.length > 200) {
       return new Response(
         JSON.stringify({ ok: false, error: 'Note must be 200 characters or less' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // Validate court_id is a number
-    if (typeof court_id !== 'number' || court_id < 1 || court_id > 7) {
+    if (typeof court_id !== 'number' || court_id < 1) {
       return new Response(
-        JSON.stringify({ ok: false, error: 'Invalid court_id. Must be between 1 and 7' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ ok: false, error: 'Invalid court_id' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -61,19 +61,18 @@ Deno.serve(async (req) => {
     if (playerError || !player) {
       return new Response(
         JSON.stringify({ ok: false, error: 'Player not found' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     if (player.court_id !== court_id) {
       return new Response(
         JSON.stringify({ ok: false, error: 'Player does not belong to this court' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // Use upsert with onConflict to handle duplicates gracefully
-    // We do NOT update existing feedback - just ignore the conflict
     const { data: insertResult, error: insertError } = await supabase
       .from('feedback')
       .upsert(
@@ -85,7 +84,7 @@ Deno.serve(async (req) => {
         },
         {
           onConflict: 'court_id,player_id',
-          ignoreDuplicates: true, // Don't update existing row, just ignore
+          ignoreDuplicates: true,
         }
       )
       .select('id');
@@ -94,11 +93,10 @@ Deno.serve(async (req) => {
       console.error('Insert error:', insertError);
       return new Response(
         JSON.stringify({ ok: false, error: 'Failed to submit feedback' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // If no row was returned, it means we hit a duplicate (ignoreDuplicates)
     const wasInserted = insertResult && insertResult.length > 0;
 
     return new Response(
@@ -113,7 +111,7 @@ Deno.serve(async (req) => {
     console.error('Error:', error);
     return new Response(
       JSON.stringify({ ok: false, error: 'Internal server error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
