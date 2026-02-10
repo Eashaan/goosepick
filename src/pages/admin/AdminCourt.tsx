@@ -506,9 +506,21 @@ const AdminCourt = () => {
     }
   };
 
+  if (authLoading || isValidating) {
+    return (
+      <PageLayout>
+        <GlobalHeader />
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="text-muted-foreground">Loading...</div>
+        </div>
+      </PageLayout>
+    );
+  }
+
   return (
     <PageLayout>
       <GlobalHeader />
+      <AdminContextBanner courtName={courtDetails?.name || `Court ${courtNumber}`} />
       <div className="min-h-screen px-4 py-4 sm:px-6">
         <div className="mx-auto max-w-2xl">
           {/* Header */}
