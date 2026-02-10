@@ -45,25 +45,55 @@ interface EventContextType {
   requiresLocation: boolean;
   isLoading: boolean;
   clearSelection: () => void;
+  isContextValid: boolean;
+  contextLabel: string;
 }
 
 const EventContext = createContext<EventContextType | undefined>(undefined);
 
 const CITY_STORAGE_KEY = "gp_selected_city";
+const EVENT_STORAGE_KEY = "gp_selected_event";
+const LOCATION_STORAGE_KEY = "gp_selected_location";
 
 export const EventProvider = ({ children }: { children: ReactNode }) => {
   const [selectedCityId, setSelectedCityIdState] = useState<string>(() => {
     return localStorage.getItem(CITY_STORAGE_KEY) || MUMBAI_CITY_ID;
   });
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
-  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+  const [selectedEventId, setSelectedEventIdState] = useState<string | null>(() => {
+    return localStorage.getItem(EVENT_STORAGE_KEY) || null;
+  });
+  const [selectedLocationId, setSelectedLocationIdState] = useState<string | null>(() => {
+    return localStorage.getItem(LOCATION_STORAGE_KEY) || null;
+  });
+
+  // Persist event selection
+  const setSelectedEventId = (id: string | null) => {
+    setSelectedEventIdState(id);
+    if (id) {
+      localStorage.setItem(EVENT_STORAGE_KEY, id);
+    } else {
+      localStorage.removeItem(EVENT_STORAGE_KEY);
+    }
+    // Reset downstream
+    setSelectedLocationIdState(null);
+    localStorage.removeItem(LOCATION_STORAGE_KEY);
+  };
+
+  // Persist location selection
+  const setSelectedLocationId = (id: string | null) => {
+    setSelectedLocationIdState(id);
+    if (id) {
+      localStorage.setItem(LOCATION_STORAGE_KEY, id);
+    } else {
+      localStorage.removeItem(LOCATION_STORAGE_KEY);
+    }
+  };
 
   const setSelectedCityId = (id: string) => {
     setSelectedCityIdState(id);
     localStorage.setItem(CITY_STORAGE_KEY, id);
     // Reset downstream selections when city changes
     setSelectedEventId(null);
-    setSelectedLocationId(null);
   };
 
   // Fetch cities
@@ -119,16 +149,58 @@ export const EventProvider = ({ children }: { children: ReactNode }) => {
   // Recurring events require location selection
   const requiresLocation = selectedEvent?.event_type === "recurring";
 
-  // Clear location when event changes
+  // Validate persisted event/location against loaded data
+  useEffect(() => {
+    if (eventsLoading || locationsLoading) return;
+
+    // If selected event doesn't exist in current city's events, clear it
+    if (selectedEventId && events.length > 0 && !events.find((e) => e.id === selectedEventId)) {
+      setSelectedEventId(null);
+    }
+  }, [events, selectedEventId, eventsLoading, locationsLoading]);
+
+  useEffect(() => {
+    if (locationsLoading) return;
+
+    // If selected location doesn't exist in current locations, clear it
+    if (selectedLocationId && locations.length > 0 && !locations.find((l) => l.id === selectedLocationId)) {
+      setSelectedLocationId(null);
+    }
+  }, [locations, selectedLocationId, locationsLoading]);
+
+  // Clear location when event changes to non-recurring
   useEffect(() => {
     if (selectedEventId && !requiresLocation) {
       setSelectedLocationId(null);
     }
   }, [selectedEventId, requiresLocation]);
 
+  // Validate city exists
+  useEffect(() => {
+    if (citiesLoading || cities.length === 0) return;
+    if (!cities.find((c) => c.id === selectedCityId)) {
+      setSelectedCityId(cities[0]?.id || MUMBAI_CITY_ID);
+    }
+  }, [cities, selectedCityId, citiesLoading]);
+
+  // Context validity: city exists, event selected and valid
+  const isContextValid = !!(
+    selectedCity &&
+    selectedEvent &&
+    (!requiresLocation || selectedLocation)
+  );
+
+  // Build context label for display
+  const contextLabel = (() => {
+    const parts: string[] = [];
+    if (selectedCity) parts.push(selectedCity.name);
+    if (selectedEvent) parts.push(selectedEvent.name);
+    if (selectedLocation) parts.push(selectedLocation.name);
+    return parts.join(" · ");
+  })();
+
   const clearSelection = () => {
     setSelectedEventId(null);
-    setSelectedLocationId(null);
   };
 
   return (
@@ -149,6 +221,8 @@ export const EventProvider = ({ children }: { children: ReactNode }) => {
         requiresLocation,
         isLoading: citiesLoading || eventsLoading || locationsLoading,
         clearSelection,
+        isContextValid,
+        contextLabel,
       }}
     >
       {children}

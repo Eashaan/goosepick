@@ -16,15 +16,16 @@ const PublicCourtSelector = () => {
     selectedEvent,
     selectedLocation,
     requiresLocation,
+    isContextValid,
     clearSelection,
   } = useEventContext();
 
-  // Redirect to home if no event selected
+  // Redirect to home if context is invalid
   useEffect(() => {
-    if (!selectedEventId) {
-      navigate("/");
+    if (!isContextValid) {
+      navigate("/", { replace: true });
     }
-  }, [selectedEventId, navigate]);
+  }, [isContextValid, navigate]);
 
   // Fetch courts for the selected event/location
   const { data: courts = [] } = useQuery({
@@ -39,7 +40,6 @@ const PublicCourtSelector = () => {
       if (selectedLocationId) {
         query = query.eq("location_id", selectedLocationId);
       } else if (selectedEventId && !requiresLocation) {
-        // For non-recurring events (like Goosepick Social), location is null
         query = query.is("location_id", null);
       }
 
@@ -47,7 +47,7 @@ const PublicCourtSelector = () => {
       if (error) throw error;
       return data;
     },
-    enabled: !!selectedEventId,
+    enabled: isContextValid,
   });
 
   const handleBackToHome = () => {
@@ -62,7 +62,7 @@ const PublicCourtSelector = () => {
       : selectedEvent.name
     : "";
 
-  if (!selectedEventId) {
+  if (!isContextValid) {
     return null;
   }
 
