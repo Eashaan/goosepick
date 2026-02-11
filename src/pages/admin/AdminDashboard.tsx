@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -18,24 +18,24 @@ interface SessionConfig {
   id: string;
   city_id: string;
   event_id: string;
+  event_type: "social" | "thursdays";
   location_id: string | null;
   court_count: number;
   setup_completed: boolean;
 }
 
-interface CourtGroup {
+interface CourtUnit {
   id: string;
-  session_config_id: string;
-  court_ids: number[];
-  format_type: string;
-}
-
-interface CourtRecord {
-  id: number;
-  name: string;
-  event_id: string | null;
+  city_id: string;
+  event_type: "social" | "thursdays";
   location_id: string | null;
+  type: "court" | "group";
+  court_number: number | null;
+  group_court_numbers: number[] | null;
+  display_name: string;
   format_type: string;
+  is_locked: boolean;
+  court_id: number | null;
 }
 
 interface CourtState {
@@ -55,6 +55,7 @@ const AdminDashboard = () => {
     requiresLocation,
     isContextValid,
     clearSelection,
+    scopeEventType,
   } = useEventContext();
 
   const [showEditSetup, setShowEditSetup] = useState(false);
@@ -83,15 +84,15 @@ const AdminDashboard = () => {
     navigate("/");
   };
 
-  // 1. Fetch session config
+  // 1. Fetch session config scoped by city + event_type + location
   const { data: sessionConfig, isLoading: configLoading } = useQuery({
-    queryKey: ["session_config", selectedCityId, selectedEventId, selectedLocationId],
+    queryKey: ["session_config", selectedCityId, scopeEventType, selectedLocationId],
     queryFn: async () => {
       let query = supabase
         .from("session_configs" as any)
         .select("*")
         .eq("city_id", selectedCityId)
-        .eq("event_id", selectedEventId!);
+        .eq("event_type", scopeEventType!);
 
       if (selectedLocationId) {
         query = query.eq("location_id", selectedLocationId);
@@ -103,66 +104,82 @@ const AdminDashboard = () => {
       if (error) throw error;
       return data as unknown as SessionConfig | null;
     },
-    enabled: isContextValid,
+    enabled: isContextValid && !!scopeEventType,
   });
 
-  // 2. Fetch court groups
-  const { data: courtGroups = [] } = useQuery({
-    queryKey: ["court_groups", sessionConfig?.id],
+  // 2. Fetch court_units scoped by city + event_type + location
+  const { data: courtUnits = [] } = useQuery({
+    queryKey: ["court_units", selectedCityId, scopeEventType, selectedLocationId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("court_groups" as any)
+      let query = supabase
+        .from("court_units" as any)
         .select("*")
-        .eq("session_config_id", sessionConfig!.id);
-      if (error) throw error;
-      return (data || []) as unknown as CourtGroup[];
-    },
-    enabled: !!sessionConfig?.id,
-  });
+        .eq("city_id", selectedCityId)
+        .eq("event_type", scopeEventType!);
 
-  // 3. Fetch DB court records for routing and status
-  const { data: courts = [] } = useQuery({
-    queryKey: ["courts", selectedEventId, selectedLocationId],
-    queryFn: async () => {
-      let query = supabase.from("courts").select("*").order("id");
-      if (selectedEventId) query = query.eq("event_id", selectedEventId);
       if (selectedLocationId) {
         query = query.eq("location_id", selectedLocationId);
-      } else if (selectedEventId && !requiresLocation) {
+      } else {
         query = query.is("location_id", null);
       }
-      const { data, error } = await query;
+
+      const { data, error } = await (query as any).order("court_number", { nullsFirst: false });
       if (error) throw error;
-      return (data || []) as CourtRecord[];
+      return (data || []) as unknown as CourtUnit[];
     },
-    enabled: isContextValid && !!sessionConfig?.setup_completed,
+    enabled: isContextValid && !!scopeEventType && !!sessionConfig?.setup_completed,
   });
 
-  // 4. Fetch court_state for all courts in context
-  const courtIds = courts.map((c) => c.id);
+  // Partition court_units
+  const courtTypeUnits = courtUnits.filter((u) => u.type === "court");
+  const groupTypeUnits = courtUnits.filter((u) => u.type === "group");
+
+  // Grouped court numbers (from all groups)
+  const groupedCourtNumbers = new Set<number>();
+  groupTypeUnits.forEach((g) => {
+    (g.group_court_numbers || []).forEach((n) => groupedCourtNumbers.add(n));
+  });
+
+  // Ungrouped courts = court-type units whose court_number is NOT in any group
+  const ungroupedUnits = courtTypeUnits
+    .filter((u) => u.court_number !== null && !groupedCourtNumbers.has(u.court_number!))
+    .sort((a, b) => (a.court_number || 0) - (b.court_number || 0));
+
+  // Groups sorted by min court number
+  const sortedGroups = [...groupTypeUnits].sort((a, b) => {
+    const aMin = Math.min(...(a.group_court_numbers || [0]));
+    const bMin = Math.min(...(b.group_court_numbers || [0]));
+    return aMin - bMin;
+  });
+
+  // 3. Fetch court_state for all linked court_ids
+  const linkedCourtIds = courtUnits
+    .filter((u) => u.court_id != null)
+    .map((u) => u.court_id!);
+
   const { data: courtStates = [] } = useQuery({
-    queryKey: ["court_states_dashboard", courtIds.join(",")],
+    queryKey: ["court_states_dashboard", linkedCourtIds.join(",")],
     queryFn: async () => {
-      if (courtIds.length === 0) return [];
+      if (linkedCourtIds.length === 0) return [];
       const { data, error } = await supabase
         .from("court_state")
         .select("court_id, phase")
-        .in("court_id", courtIds);
+        .in("court_id", linkedCourtIds);
       if (error) return [];
       return (data || []) as CourtState[];
     },
-    enabled: courtIds.length > 0,
+    enabled: linkedCourtIds.length > 0,
   });
 
-  // 5. Fetch match counts per court
+  // 4. Fetch match counts per court
   const { data: courtMatchCounts = new Map<number, number>() } = useQuery({
-    queryKey: ["court_match_counts", courtIds.join(",")],
+    queryKey: ["court_match_counts", linkedCourtIds.join(",")],
     queryFn: async () => {
-      if (courtIds.length === 0) return new Map<number, number>();
+      if (linkedCourtIds.length === 0) return new Map<number, number>();
       const { data, error } = await supabase
         .from("matches")
         .select("court_id")
-        .in("court_id", courtIds);
+        .in("court_id", linkedCourtIds);
       if (error) return new Map<number, number>();
       const counts = new Map<number, number>();
       (data || []).forEach((m) => {
@@ -170,7 +187,7 @@ const AdminDashboard = () => {
       });
       return counts;
     },
-    enabled: courtIds.length > 0,
+    enabled: linkedCourtIds.length > 0,
   });
 
   if (isLoading || configLoading) {
@@ -190,71 +207,33 @@ const AdminDashboard = () => {
   const setupCompleted = sessionConfig?.setup_completed === true;
   const courtCount = sessionConfig?.court_count || 0;
 
-  // === DERIVE DISPLAY FROM court_count (1..N) ===
-  const allCourtNumbers = Array.from({ length: courtCount }, (_, i) => i + 1);
-
-  // Map DB court records: courtNumber → DB court
-  const courtsByNumber = new Map<number, CourtRecord>();
-  courts.forEach((c) => {
-    const num = parseInt(c.name.replace("Court ", ""));
-    if (!isNaN(num)) courtsByNumber.set(num, c);
-  });
-
-  // Map DB court IDs to court numbers (for group resolution)
-  const courtIdToNumber = new Map<number, number>();
-  courts.forEach((c) => {
-    const num = parseInt(c.name.replace("Court ", ""));
-    if (!isNaN(num)) courtIdToNumber.set(c.id, num);
-  });
-
-  // Determine grouped court numbers from court_groups (which use DB IDs)
-  const groupedCourtNumbers = new Set<number>();
-  courtGroups.forEach((g) => {
-    g.court_ids.forEach((dbId) => {
-      const num = courtIdToNumber.get(dbId);
-      if (num !== undefined) groupedCourtNumbers.add(num);
-    });
-  });
-
-  // Ungrouped courts = all court numbers minus grouped
-  const ungroupedCourtNumbers = allCourtNumbers.filter((n) => !groupedCourtNumbers.has(n));
-
   // === STATUS HELPERS ===
-  const getCourtStatus = (courtNum: number): CourtStatus => {
-    const dbCourt = courtsByNumber.get(courtNum);
-    if (!dbCourt) return "setup";
-    const matchCount = courtMatchCounts.get(dbCourt.id) || 0;
+  const getUnitStatus = (unit: CourtUnit): CourtStatus => {
+    if (!unit.court_id) return "setup";
+    const matchCount = courtMatchCounts.get(unit.court_id) || 0;
     if (matchCount === 0) return "setup";
-    const state = courtStates.find((s) => s.court_id === dbCourt.id);
+    const state = courtStates.find((s) => s.court_id === unit.court_id);
     if (state?.phase === "completed") return "completed";
     if (state?.phase === "in_progress") return "live";
     return "locked";
   };
 
-  const getGroupStatus = (courtNums: number[]): CourtStatus => {
-    const statuses = courtNums.map(getCourtStatus);
+  const getGroupStatus = (group: CourtUnit): CourtStatus => {
+    const courtNums = group.group_court_numbers || [];
+    const constituentUnits = courtTypeUnits.filter(
+      (u) => u.court_number !== null && courtNums.includes(u.court_number!)
+    );
+    const statuses = constituentUnits.map(getUnitStatus);
     if (statuses.includes("live")) return "live";
     if (statuses.includes("completed")) return "completed";
     if (statuses.includes("locked")) return "locked";
     return "setup";
   };
 
-  // === BUILD DISPLAY ITEMS ===
-  // Groups sorted by lowest court number
-  const sortedGroups = [...courtGroups]
-    .map((g) => {
-      const courtNums = g.court_ids
-        .map((dbId) => courtIdToNumber.get(dbId))
-        .filter((n): n is number => n !== undefined)
-        .sort((a, b) => a - b);
-      return { ...g, courtNums };
-    })
-    .sort((a, b) => (a.courtNums[0] || 0) - (b.courtNums[0] || 0));
-
   // === SUMMARY COUNTS ===
   const allUnitStatuses: CourtStatus[] = [
-    ...ungroupedCourtNumbers.map(getCourtStatus),
-    ...sortedGroups.map((g) => getGroupStatus(g.courtNums)),
+    ...ungroupedUnits.map(getUnitStatus),
+    ...sortedGroups.map(getGroupStatus),
   ];
   const activeCount = allUnitStatuses.filter((s) => s !== "setup").length;
   const liveCount = allUnitStatuses.filter((s) => s === "live").length;
@@ -263,24 +242,35 @@ const AdminDashboard = () => {
     setShowEditSetup(false);
   };
 
-  // Auto-create a court DB row + court_state on click, then navigate
-  const handleCourtClick = async (courtNum: number) => {
-    setCreatingCourtNum(courtNum);
+  // Auto-create court DB row + link court_unit on click, then navigate
+  const handleCourtClick = async (unit: CourtUnit) => {
+    if (!unit.court_number) return;
+    setCreatingCourtNum(unit.court_number);
     try {
+      // Create courts row
       const { data, error } = await supabase
         .from("courts")
         .insert({
-          name: `Court ${courtNum}`,
+          name: `Court ${unit.court_number}`,
           event_id: selectedEventId,
           location_id: selectedLocationId || null,
-          format_type: "mystery_partner" as any,
+          format_type: unit.format_type as any,
         } as any)
         .select("id")
         .single();
       if (error) throw error;
+      const courtId = (data as any).id;
+
       // Create court_state
-      await supabase.from("court_state").insert({ court_id: (data as any).id } as any);
-      navigate(`/admin/court/${(data as any).id}`);
+      await supabase.from("court_state").insert({ court_id: courtId } as any);
+
+      // Link court_unit to the new court
+      await supabase
+        .from("court_units" as any)
+        .update({ court_id: courtId } as any)
+        .eq("id", unit.id);
+
+      navigate(`/admin/court/${courtId}`);
     } catch (err: any) {
       toast.error("Failed to initialize court: " + err.message);
     } finally {
@@ -292,10 +282,9 @@ const AdminDashboard = () => {
 
   // Locked court numbers for setup wizard
   const lockedCourtNumbers = new Set<number>();
-  courts.forEach((c) => {
-    if ((courtMatchCounts.get(c.id) || 0) > 0) {
-      const num = parseInt(c.name.replace("Court ", ""));
-      if (!isNaN(num)) lockedCourtNumbers.add(num);
+  courtTypeUnits.forEach((u) => {
+    if (u.court_id && (courtMatchCounts.get(u.court_id) || 0) > 0 && u.court_number) {
+      lockedCourtNumbers.add(u.court_number);
     }
   });
 
@@ -328,7 +317,7 @@ const AdminDashboard = () => {
             <div className="mb-8">
               <SessionSummaryStrip
                 totalCourts={courtCount}
-                groupCount={courtGroups.length}
+                groupCount={sortedGroups.length}
                 activeCount={activeCount}
                 liveCount={liveCount}
               />
@@ -340,6 +329,7 @@ const AdminDashboard = () => {
               cityId={selectedCityId}
               eventId={selectedEventId!}
               locationId={selectedLocationId}
+              scopeEventType={scopeEventType!}
               existingConfigId={sessionConfig?.id}
               existingCourtCount={sessionConfig?.court_count}
               lockedCourtIds={lockedCourtNumbers}
@@ -347,42 +337,30 @@ const AdminDashboard = () => {
             />
           ) : (
             <>
-              {/* Courts & Groups Grid — derived from court_count */}
+              {/* Courts & Groups Grid — derived from court_units */}
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
                 {/* 1. Ungrouped courts (ascending) */}
-                {ungroupedCourtNumbers.map((courtNum) => {
-                  const dbCourt = courtsByNumber.get(courtNum);
-                  const status = getCourtStatus(courtNum);
+                {ungroupedUnits.map((unit) => {
+                  const status = getUnitStatus(unit);
                   return (
                     <CourtStatusCard
-                      key={`court-${courtNum}`}
-                      label={`Court ${courtNum}`}
-                      to={dbCourt ? `/admin/court/${dbCourt.id}` : undefined}
-                      onClick={!dbCourt ? () => handleCourtClick(courtNum) : undefined}
-                      isLoading={creatingCourtNum === courtNum}
+                      key={`court-${unit.id}`}
+                      label={unit.display_name}
+                      to={unit.court_id ? `/admin/court/${unit.court_id}` : undefined}
+                      onClick={!unit.court_id ? () => handleCourtClick(unit) : undefined}
+                      isLoading={creatingCourtNum === unit.court_number}
                       status={status}
                     />
                   );
                 })}
 
                 {/* 2. Groups (sorted by lowest court number) */}
-                {sortedGroups.map((g) => {
-                  const nums = g.courtNums;
-                  let label: string;
-                  if (nums.length === 2) {
-                    label = `Courts ${nums[0]} & ${nums[1]}`;
-                  } else if (nums.length > 2) {
-                    const last = nums[nums.length - 1];
-                    const rest = nums.slice(0, -1);
-                    label = `Courts ${rest.join(", ")} & ${last}`;
-                  } else {
-                    label = `Court ${nums[0] || "?"}`;
-                  }
-                  const status = getGroupStatus(nums);
+                {sortedGroups.map((group) => {
+                  const status = getGroupStatus(group);
                   return (
                     <CourtStatusCard
-                      key={`group-${g.id}`}
-                      label={label}
+                      key={`group-${group.id}`}
+                      label={group.display_name}
                       status={status}
                       disabled
                       disabledLabel="Coming soon"
@@ -390,7 +368,7 @@ const AdminDashboard = () => {
                   );
                 })}
 
-                {allCourtNumbers.length === 0 && (
+                {ungroupedUnits.length === 0 && sortedGroups.length === 0 && (
                   <div className="col-span-full text-center py-12 text-muted-foreground">
                     No courts configured yet.
                   </div>

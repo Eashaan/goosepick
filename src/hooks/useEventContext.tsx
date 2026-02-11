@@ -47,6 +47,7 @@ interface EventContextType {
   clearSelection: () => void;
   isContextValid: boolean;
   contextLabel: string;
+  scopeEventType: 'social' | 'thursdays' | null;
 }
 
 const EventContext = createContext<EventContextType | undefined>(undefined);
@@ -149,6 +150,11 @@ export const EventProvider = ({ children }: { children: ReactNode }) => {
   // Recurring events require location selection
   const requiresLocation = selectedEvent?.event_type === "recurring";
 
+  // Derive scope event type for session_config / court_units scoping
+  const scopeEventType: 'social' | 'thursdays' | null = selectedEvent
+    ? (selectedEvent.event_type === 'one_off' ? 'social' : 'thursdays')
+    : null;
+
   // Validate persisted event/location against loaded data
   useEffect(() => {
     if (eventsLoading || locationsLoading) return;
@@ -223,6 +229,7 @@ export const EventProvider = ({ children }: { children: ReactNode }) => {
         clearSelection,
         isContextValid,
         contextLabel,
+        scopeEventType,
       }}
     >
       {children}

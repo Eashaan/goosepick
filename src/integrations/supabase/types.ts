@@ -96,6 +96,76 @@ export type Database = {
           },
         ]
       }
+      court_units: {
+        Row: {
+          city_id: string
+          court_id: number | null
+          court_number: number | null
+          created_at: string
+          display_name: string
+          event_type: Database["public"]["Enums"]["scope_event_type"]
+          format_type: Database["public"]["Enums"]["format_type"]
+          group_court_numbers: number[] | null
+          id: string
+          is_locked: boolean
+          location_id: string | null
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          city_id: string
+          court_id?: number | null
+          court_number?: number | null
+          created_at?: string
+          display_name: string
+          event_type: Database["public"]["Enums"]["scope_event_type"]
+          format_type?: Database["public"]["Enums"]["format_type"]
+          group_court_numbers?: number[] | null
+          id?: string
+          is_locked?: boolean
+          location_id?: string | null
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          city_id?: string
+          court_id?: number | null
+          court_number?: number | null
+          created_at?: string
+          display_name?: string
+          event_type?: Database["public"]["Enums"]["scope_event_type"]
+          format_type?: Database["public"]["Enums"]["format_type"]
+          group_court_numbers?: number[] | null
+          id?: string
+          is_locked?: boolean
+          location_id?: string | null
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "court_units_city_id_fkey"
+            columns: ["city_id"]
+            isOneToOne: false
+            referencedRelation: "cities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "court_units_court_id_fkey"
+            columns: ["court_id"]
+            isOneToOne: false
+            referencedRelation: "courts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "court_units_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       courts: {
         Row: {
           event_id: string | null
@@ -438,27 +508,33 @@ export type Database = {
           court_count: number
           created_at: string
           event_id: string
+          event_type: Database["public"]["Enums"]["scope_event_type"]
           id: string
           location_id: string | null
           setup_completed: boolean
+          updated_at: string | null
         }
         Insert: {
           city_id: string
           court_count: number
           created_at?: string
           event_id: string
+          event_type: Database["public"]["Enums"]["scope_event_type"]
           id?: string
           location_id?: string | null
           setup_completed?: boolean
+          updated_at?: string | null
         }
         Update: {
           city_id?: string
           court_count?: number
           created_at?: string
           event_id?: string
+          event_type?: Database["public"]["Enums"]["scope_event_type"]
           id?: string
           location_id?: string | null
           setup_completed?: boolean
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -527,6 +603,7 @@ export type Database = {
         | "format_3"
         | "format_4"
         | "format_5"
+      scope_event_type: "social" | "thursdays"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -665,6 +742,7 @@ export const Constants = {
         "format_4",
         "format_5",
       ],
+      scope_event_type: ["social", "thursdays"],
     },
   },
 } as const
