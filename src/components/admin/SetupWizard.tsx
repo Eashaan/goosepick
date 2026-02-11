@@ -180,13 +180,18 @@ const SetupWizard = ({
         const group = groups.find((g) => g.courtNumbers.includes(i));
         const finalFormat = group ? group.formatType : format;
 
-        // Try to find existing court for this context
-        const { data: existing } = await supabase
+        // Try to find existing court for this context (scoped by location)
+        let courtLookup = supabase
           .from("courts")
           .select("id")
           .eq("event_id", eventId)
-          .eq("name", `Court ${i}`)
-          .maybeSingle();
+          .eq("name", `Court ${i}`);
+        if (locationId) {
+          courtLookup = courtLookup.eq("location_id", locationId);
+        } else {
+          courtLookup = courtLookup.is("location_id", null);
+        }
+        const { data: existing } = await courtLookup.maybeSingle();
 
         if (locationId) {
           if (existing) {
@@ -223,11 +228,17 @@ const SetupWizard = ({
         }
       }
 
-      // 3. Create court_state for each court that doesn't have one
-      const { data: courts } = await supabase
+      // 3. Create court_state for each court that doesn't have one (scoped)
+      let courtStateQuery = supabase
         .from("courts")
         .select("id")
         .eq("event_id", eventId);
+      if (locationId) {
+        courtStateQuery = courtStateQuery.eq("location_id", locationId);
+      } else {
+        courtStateQuery = courtStateQuery.is("location_id", null);
+      }
+      const { data: courts } = await courtStateQuery;
 
       if (courts) {
         for (const court of courts) {
