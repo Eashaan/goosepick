@@ -28,6 +28,7 @@ interface SetupWizardProps {
   cityId: string;
   eventId: string;
   locationId: string | null;
+  scopeEventType: 'social' | 'thursdays';
   existingConfigId?: string;
   existingCourtCount?: number;
   existingGroups?: CourtGroup[];
@@ -40,6 +41,7 @@ const SetupWizard = ({
   cityId,
   eventId,
   locationId,
+  scopeEventType,
   existingConfigId,
   existingCourtCount,
   existingGroups = [],
@@ -60,9 +62,6 @@ const SetupWizard = ({
 
   // Per-unit lock helpers
   const isCourtLocked = (courtNum: number): boolean => {
-    // Find actual court ID from DB courts — courtNum is 1-indexed label
-    // lockedCourtIds contains DB court IDs, but we need to map court numbers to IDs
-    // For now, we check if any locked court has this number in its name
     return lockedCourtIds.has(courtNum);
   };
 
@@ -72,10 +71,7 @@ const SetupWizard = ({
 
   const hasAnyLockedCourts = lockedCourtIds.size > 0;
 
-  // Courts that are already in a group
   const groupedCourts = new Set(groups.flatMap((g) => g.courtNumbers));
-
-  // Ungrouped courts
   const ungroupedCourts = allCourtNumbers.filter((n) => !groupedCourts.has(n));
 
   const togglePendingCourt = (n: number) => {
@@ -107,9 +103,7 @@ const SetupWizard = ({
     return `Courts ${rest.join(", ")} & ${last}`;
   };
 
-  // Build items for step 3: ungrouped courts + groups
   const formatItems: { key: string; label: string; isGroup: boolean; groupIdx?: number; courtNumber?: number }[] = [];
-  // Recalculate ungrouped based on current groups
   const currentGroupedCourts = new Set(groups.flatMap((g) => g.courtNumbers));
   const currentUngrouped = allCourtNumbers.filter((n) => !currentGroupedCourts.has(n));
 
@@ -151,6 +145,7 @@ const SetupWizard = ({
           .insert({
             city_id: cityId,
             event_id: eventId,
+            event_type: scopeEventType,
             location_id: locationId,
             court_count: courtCount,
             setup_completed: true,
@@ -176,11 +171,9 @@ const SetupWizard = ({
       // 2. Create court records (upsert-style: create if not exist)
       for (let i = 1; i <= courtCount; i++) {
         const format = courtFormats[i] || "mystery_partner";
-        // Check if a group overrides this court's format
         const group = groups.find((g) => g.courtNumbers.includes(i));
         const finalFormat = group ? group.formatType : format;
 
-        // Try to find existing court for this context (scoped by location)
         let courtLookup = supabase
           .from("courts")
           .select("id")
@@ -193,42 +186,24 @@ const SetupWizard = ({
         }
         const { data: existing } = await courtLookup.maybeSingle();
 
-        if (locationId) {
-          if (existing) {
-            await supabase
-              .from("courts")
-              .update({ format_type: finalFormat, location_id: locationId } as any)
-              .eq("id", existing.id);
-          } else {
-            await supabase
-              .from("courts")
-              .insert({
-                name: `Court ${i}`,
-                event_id: eventId,
-                location_id: locationId,
-                format_type: finalFormat,
-              } as any);
-          }
+        if (existing) {
+          await supabase
+            .from("courts")
+            .update({ format_type: finalFormat, location_id: locationId || null } as any)
+            .eq("id", existing.id);
         } else {
-          if (existing) {
-            await supabase
-              .from("courts")
-              .update({ format_type: finalFormat } as any)
-              .eq("id", existing.id);
-          } else {
-            await supabase
-              .from("courts")
-              .insert({
-                name: `Court ${i}`,
-                event_id: eventId,
-                location_id: null,
-                format_type: finalFormat,
-              } as any);
-          }
+          await supabase
+            .from("courts")
+            .insert({
+              name: `Court ${i}`,
+              event_id: eventId,
+              location_id: locationId || null,
+              format_type: finalFormat,
+            } as any);
         }
       }
 
-      // 3. Create court_state for each court that doesn't have one (scoped)
+      // 3. Create court_state for each court that doesn't have one
       let courtStateQuery = supabase
         .from("courts")
         .select("id")
@@ -254,9 +229,8 @@ const SetupWizard = ({
         }
       }
 
-      // 4. Insert court_groups
+      // 4. Insert court_groups (legacy, kept for backward compat)
       for (const g of groups) {
-        // Resolve court IDs from names
         const courtIds: number[] = [];
         for (const n of g.courtNumbers) {
           const { data: c } = await supabase
@@ -274,11 +248,102 @@ const SetupWizard = ({
           format_type: g.formatType,
         } as any);
       }
+
+      // 5. Upsert court_units for this scope
+      // Delete non-locked court_units for this scope first
+      let deleteQuery = supabase
+        .from("court_units" as any)
+        .delete()
+        .eq("city_id", cityId)
+        .eq("event_type", scopeEventType)
+        .eq("is_locked", false);
+      if (locationId) {
+        deleteQuery = deleteQuery.eq("location_id", locationId);
+      } else {
+        deleteQuery = deleteQuery.is("location_id", null);
+      }
+      await deleteQuery;
+
+      // Re-fetch courts to get IDs for linking
+      let courtsFetch = supabase
+        .from("courts")
+        .select("id, name")
+        .eq("event_id", eventId);
+      if (locationId) {
+        courtsFetch = courtsFetch.eq("location_id", locationId);
+      } else {
+        courtsFetch = courtsFetch.is("location_id", null);
+      }
+      const { data: allCourts } = await courtsFetch;
+      const courtNameToId = new Map<string, number>();
+      (allCourts || []).forEach((c: any) => {
+        courtNameToId.set(c.name, c.id);
+      });
+
+      // Insert court_units for individual courts
+      for (let i = 1; i <= courtCount; i++) {
+        const courtId = courtNameToId.get(`Court ${i}`);
+        const group = groups.find((g) => g.courtNumbers.includes(i));
+        const finalFormat = group ? group.formatType : (courtFormats[i] || "mystery_partner");
+
+        // Check if a locked unit exists for this court_number
+        let existingCheck = supabase
+          .from("court_units" as any)
+          .select("id")
+          .eq("city_id", cityId)
+          .eq("event_type", scopeEventType)
+          .eq("type", "court")
+          .eq("court_number", i)
+          .eq("is_locked", true);
+        if (locationId) {
+          existingCheck = existingCheck.eq("location_id", locationId);
+        } else {
+          existingCheck = existingCheck.is("location_id", null);
+        }
+        const { data: lockedUnit } = await existingCheck.maybeSingle();
+
+        if (!lockedUnit) {
+          await supabase.from("court_units" as any).insert({
+            city_id: cityId,
+            event_type: scopeEventType,
+            location_id: locationId,
+            type: "court",
+            court_number: i,
+            display_name: `Court ${i}`,
+            format_type: finalFormat,
+            court_id: courtId || null,
+          } as any);
+        }
+      }
+
+      // Insert court_units for groups
+      for (const g of groups) {
+        const nums = g.courtNumbers;
+        let displayName: string;
+        if (nums.length === 2) {
+          displayName = `Courts ${nums[0]} & ${nums[1]}`;
+        } else {
+          const last = nums[nums.length - 1];
+          const rest = nums.slice(0, -1);
+          displayName = `Courts ${rest.join(", ")} & ${last}`;
+        }
+
+        await supabase.from("court_units" as any).insert({
+          city_id: cityId,
+          event_type: scopeEventType,
+          location_id: locationId,
+          type: "group",
+          group_court_numbers: nums,
+          display_name: displayName,
+          format_type: g.formatType,
+        } as any);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["session_config"] });
       queryClient.invalidateQueries({ queryKey: ["courts"] });
       queryClient.invalidateQueries({ queryKey: ["court_groups"] });
+      queryClient.invalidateQueries({ queryKey: ["court_units"] });
       toast.success("Setup completed!");
       onComplete();
     },
@@ -287,7 +352,6 @@ const SetupWizard = ({
     },
   });
 
-  // Court count cannot be reduced below locked courts
   const maxLockedCourtNum = allCourtNumbers.filter((n) => isCourtLocked(n)).reduce((max, n) => Math.max(max, n), 0);
 
   return (
@@ -351,7 +415,6 @@ const SetupWizard = ({
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Existing groups */}
             {groups.length > 0 && (
               <div className="space-y-2">
                 <p className="text-sm font-medium text-muted-foreground">Groups</p>
@@ -376,7 +439,6 @@ const SetupWizard = ({
               </div>
             )}
 
-            {/* Available courts for grouping */}
             {ungroupedCourts.length >= 2 && (
               <div className="space-y-2">
                 <p className="text-sm font-medium text-muted-foreground">Select courts to group</p>
