@@ -35,6 +35,38 @@ export type Database = {
         }
         Relationships: []
       }
+      court_groups: {
+        Row: {
+          court_ids: number[]
+          created_at: string
+          format_type: Database["public"]["Enums"]["format_type"]
+          id: string
+          session_config_id: string
+        }
+        Insert: {
+          court_ids: number[]
+          created_at?: string
+          format_type?: Database["public"]["Enums"]["format_type"]
+          id?: string
+          session_config_id: string
+        }
+        Update: {
+          court_ids?: number[]
+          created_at?: string
+          format_type?: Database["public"]["Enums"]["format_type"]
+          id?: string
+          session_config_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "court_groups_session_config_id_fkey"
+            columns: ["session_config_id"]
+            isOneToOne: false
+            referencedRelation: "session_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       court_state: {
         Row: {
           court_id: number
@@ -396,6 +428,58 @@ export type Database = {
             columns: ["court_id"]
             isOneToOne: false
             referencedRelation: "courts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      session_configs: {
+        Row: {
+          city_id: string
+          court_count: number
+          created_at: string
+          event_id: string
+          id: string
+          location_id: string | null
+          setup_completed: boolean
+        }
+        Insert: {
+          city_id: string
+          court_count: number
+          created_at?: string
+          event_id: string
+          id?: string
+          location_id?: string | null
+          setup_completed?: boolean
+        }
+        Update: {
+          city_id?: string
+          court_count?: number
+          created_at?: string
+          event_id?: string
+          id?: string
+          location_id?: string | null
+          setup_completed?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_configs_city_id_fkey"
+            columns: ["city_id"]
+            isOneToOne: false
+            referencedRelation: "cities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_configs_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_configs_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
             referencedColumns: ["id"]
           },
         ]
