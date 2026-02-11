@@ -424,11 +424,18 @@ const AdminCourt = () => {
     },
   });
 
-  // Reset court mutation
+  // Reset court mutation — deletes all data scoped to this specific court
   const resetCourt = useMutation({
     mutationFn: async () => {
+      // Delete feedback for this court
+      await supabase.from("feedback").delete().eq("court_id", courtNumber);
+      // Delete match substitutions for this court
+      await supabase.from("match_substitutions").delete().eq("court_id", courtNumber);
+      // Delete matches for this court
       await supabase.from("matches").delete().eq("court_id", courtNumber);
+      // Delete players for this court
       await supabase.from("players").delete().eq("court_id", courtNumber);
+      // Reset court state
       await supabase
         .from("court_state")
         .update({ current_match_index: 0, phase: "idle", updated_at: new Date().toISOString() })
@@ -438,6 +445,7 @@ const AdminCourt = () => {
       queryClient.invalidateQueries({ queryKey: ["players", courtNumber] });
       queryClient.invalidateQueries({ queryKey: ["matches", courtNumber] });
       queryClient.invalidateQueries({ queryKey: ["court_state", courtNumber] });
+      queryClient.invalidateQueries({ queryKey: ["locked_courts"] });
       setShowResetDialog(false);
       setResetPhrase("");
       setPlayersOpen(true);
