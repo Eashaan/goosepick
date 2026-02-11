@@ -8,6 +8,8 @@ import PageLayout from "@/components/layout/PageLayout";
 import GlobalHeader from "@/components/layout/GlobalHeader";
 import AdminContextBanner from "@/components/admin/AdminContextBanner";
 import SetupWizard from "@/components/admin/SetupWizard";
+import SessionSummaryStrip from "@/components/admin/SessionSummaryStrip";
+import CourtStatusCard, { type CourtStatus } from "@/components/admin/CourtStatusCard";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useEventContext } from "@/hooks/useEventContext";
 
@@ -25,6 +27,19 @@ interface CourtGroup {
   session_config_id: string;
   court_ids: number[];
   format_type: string;
+}
+
+interface CourtRecord {
+  id: number;
+  name: string;
+  event_id: string | null;
+  location_id: string | null;
+  format_type: string;
+}
+
+interface CourtState {
+  court_id: number;
+  phase: "idle" | "in_progress" | "completed";
 }
 
 const AdminDashboard = () => {
@@ -66,7 +81,7 @@ const AdminDashboard = () => {
     navigate("/");
   };
 
-  // Fetch session config for current context
+  // 1. Fetch session config
   const { data: sessionConfig, isLoading: configLoading } = useQuery({
     queryKey: ["session_config", selectedCityId, selectedEventId, selectedLocationId],
     queryFn: async () => {
@@ -89,7 +104,7 @@ const AdminDashboard = () => {
     enabled: isContextValid,
   });
 
-  // Fetch court groups for this config
+  // 2. Fetch court groups
   const { data: courtGroups = [] } = useQuery({
     queryKey: ["court_groups", sessionConfig?.id],
     queryFn: async () => {
@@ -103,7 +118,7 @@ const AdminDashboard = () => {
     enabled: !!sessionConfig?.id,
   });
 
-  // Fetch courts for the selected event/location
+  // 3. Fetch DB court records for routing and status
   const { data: courts = [] } = useQuery({
     queryKey: ["courts", selectedEventId, selectedLocationId],
     queryFn: async () => {
@@ -116,35 +131,44 @@ const AdminDashboard = () => {
       }
       const { data, error } = await query;
       if (error) throw error;
-      return data;
+      return (data || []) as CourtRecord[];
     },
     enabled: isContextValid && !!sessionConfig?.setup_completed,
   });
 
-  // Check which courts have matches (for per-court lock detection)
-  // Returns a Set of court numbers (extracted from court names like "Court 1")
-  const { data: lockedCourtNumbers = new Set<number>() } = useQuery({
-    queryKey: ["locked_courts", selectedEventId, selectedLocationId, courts.map(c => c.id).join(",")],
+  // 4. Fetch court_state for all courts in context
+  const courtIds = courts.map((c) => c.id);
+  const { data: courtStates = [] } = useQuery({
+    queryKey: ["court_states_dashboard", courtIds.join(",")],
     queryFn: async () => {
-      const courtIds = courts.map((c) => c.id);
-      if (courtIds.length === 0) return new Set<number>();
+      if (courtIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("court_state")
+        .select("court_id, phase")
+        .in("court_id", courtIds);
+      if (error) return [];
+      return (data || []) as CourtState[];
+    },
+    enabled: courtIds.length > 0,
+  });
+
+  // 5. Fetch match counts per court
+  const { data: courtMatchCounts = new Map<number, number>() } = useQuery({
+    queryKey: ["court_match_counts", courtIds.join(",")],
+    queryFn: async () => {
+      if (courtIds.length === 0) return new Map<number, number>();
       const { data, error } = await supabase
         .from("matches")
         .select("court_id")
         .in("court_id", courtIds);
-      if (error) return new Set<number>();
-      // Map DB court_ids back to court numbers
-      const lockedDbIds = new Set((data || []).map((m) => m.court_id));
-      const courtNumbers = new Set<number>();
-      courts.forEach((c) => {
-        if (lockedDbIds.has(c.id)) {
-          const num = parseInt(c.name.replace("Court ", ""));
-          if (!isNaN(num)) courtNumbers.add(num);
-        }
+      if (error) return new Map<number, number>();
+      const counts = new Map<number, number>();
+      (data || []).forEach((m) => {
+        counts.set(m.court_id, (counts.get(m.court_id) || 0) + 1);
       });
-      return courtNumbers;
+      return counts;
     },
-    enabled: courts.length > 0,
+    enabled: courtIds.length > 0,
   });
 
   if (isLoading || configLoading) {
@@ -162,41 +186,91 @@ const AdminDashboard = () => {
   }
 
   const setupCompleted = sessionConfig?.setup_completed === true;
-  const hasAnyMatches = lockedCourtNumbers.size > 0;
+  const courtCount = sessionConfig?.court_count || 0;
 
-  // Build grouped court IDs set
-  const groupedCourtIdSet = new Set(courtGroups.flatMap((g) => g.court_ids));
+  // === DERIVE DISPLAY FROM court_count (1..N) ===
+  const allCourtNumbers = Array.from({ length: courtCount }, (_, i) => i + 1);
 
-  // Ungrouped courts
-  const ungroupedCourts = courts.filter((c) => !groupedCourtIdSet.has(c.id));
-
-  // Build display items
-  const displayItems: { key: string; label: string; isGroup: boolean; courtId?: number; groupId?: string }[] = [];
-
-  ungroupedCourts.forEach((c) => {
-    displayItems.push({ key: `court-${c.id}`, label: c.name, isGroup: false, courtId: c.id });
+  // Map DB court records: courtNumber → DB court
+  const courtsByNumber = new Map<number, CourtRecord>();
+  courts.forEach((c) => {
+    const num = parseInt(c.name.replace("Court ", ""));
+    if (!isNaN(num)) courtsByNumber.set(num, c);
   });
 
+  // Map DB court IDs to court numbers (for group resolution)
+  const courtIdToNumber = new Map<number, number>();
+  courts.forEach((c) => {
+    const num = parseInt(c.name.replace("Court ", ""));
+    if (!isNaN(num)) courtIdToNumber.set(c.id, num);
+  });
+
+  // Determine grouped court numbers from court_groups (which use DB IDs)
+  const groupedCourtNumbers = new Set<number>();
   courtGroups.forEach((g) => {
-    const groupCourts = courts.filter((c) => g.court_ids.includes(c.id)).sort((a, b) => a.id - b.id);
-    const numbers = groupCourts.map((c) => c.name.replace("Court ", ""));
-    let label: string;
-    if (numbers.length === 2) {
-      label = `Courts ${numbers[0]} & ${numbers[1]}`;
-    } else {
-      const last = numbers[numbers.length - 1];
-      const rest = numbers.slice(0, -1);
-      label = `Courts ${rest.join(", ")} & ${last}`;
-    }
-    displayItems.push({ key: `group-${g.id}`, label, isGroup: true, groupId: g.id });
+    g.court_ids.forEach((dbId) => {
+      const num = courtIdToNumber.get(dbId);
+      if (num !== undefined) groupedCourtNumbers.add(num);
+    });
   });
+
+  // Ungrouped courts = all court numbers minus grouped
+  const ungroupedCourtNumbers = allCourtNumbers.filter((n) => !groupedCourtNumbers.has(n));
+
+  // === STATUS HELPERS ===
+  const getCourtStatus = (courtNum: number): CourtStatus => {
+    const dbCourt = courtsByNumber.get(courtNum);
+    if (!dbCourt) return "setup";
+    const matchCount = courtMatchCounts.get(dbCourt.id) || 0;
+    if (matchCount === 0) return "setup";
+    const state = courtStates.find((s) => s.court_id === dbCourt.id);
+    if (state?.phase === "completed") return "completed";
+    if (state?.phase === "in_progress") return "live";
+    return "locked";
+  };
+
+  const getGroupStatus = (courtNums: number[]): CourtStatus => {
+    const statuses = courtNums.map(getCourtStatus);
+    if (statuses.includes("live")) return "live";
+    if (statuses.includes("completed")) return "completed";
+    if (statuses.includes("locked")) return "locked";
+    return "setup";
+  };
+
+  // === BUILD DISPLAY ITEMS ===
+  // Groups sorted by lowest court number
+  const sortedGroups = [...courtGroups]
+    .map((g) => {
+      const courtNums = g.court_ids
+        .map((dbId) => courtIdToNumber.get(dbId))
+        .filter((n): n is number => n !== undefined)
+        .sort((a, b) => a - b);
+      return { ...g, courtNums };
+    })
+    .sort((a, b) => (a.courtNums[0] || 0) - (b.courtNums[0] || 0));
+
+  // === SUMMARY COUNTS ===
+  const allUnitStatuses: CourtStatus[] = [
+    ...ungroupedCourtNumbers.map(getCourtStatus),
+    ...sortedGroups.map((g) => getGroupStatus(g.courtNums)),
+  ];
+  const activeCount = allUnitStatuses.filter((s) => s !== "setup").length;
+  const liveCount = allUnitStatuses.filter((s) => s === "live").length;
 
   const handleSetupComplete = () => {
     setShowEditSetup(false);
   };
 
-  // Show wizard if no setup exists or edit mode
   const showWizard = !setupCompleted || showEditSetup;
+
+  // Locked court numbers for setup wizard
+  const lockedCourtNumbers = new Set<number>();
+  courts.forEach((c) => {
+    if ((courtMatchCounts.get(c.id) || 0) > 0) {
+      const num = parseInt(c.name.replace("Court ", ""));
+      if (!isNaN(num)) lockedCourtNumbers.add(num);
+    }
+  });
 
   return (
     <PageLayout>
@@ -205,7 +279,7 @@ const AdminDashboard = () => {
       <div className="min-h-screen px-6 py-8">
         <div className="mx-auto max-w-2xl">
           {/* Header */}
-          <div className="mb-8 flex items-center gap-4">
+          <div className="mb-2 flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={handleBackToHome} className="shrink-0">
               <ChevronLeft className="h-6 w-6" />
             </Button>
@@ -222,6 +296,18 @@ const AdminDashboard = () => {
             )}
           </div>
 
+          {/* Session Summary Strip */}
+          {setupCompleted && !showWizard && (
+            <div className="mb-8">
+              <SessionSummaryStrip
+                totalCourts={courtCount}
+                groupCount={courtGroups.length}
+                activeCount={activeCount}
+                liveCount={liveCount}
+              />
+            </div>
+          )}
+
           {showWizard ? (
             <SetupWizard
               cityId={selectedCityId}
@@ -234,38 +320,50 @@ const AdminDashboard = () => {
             />
           ) : (
             <>
-              {/* Per-court lock info */}
-              {hasAnyMatches && (
-                <div className="mb-4 rounded-lg bg-muted/50 p-3 text-center text-sm text-muted-foreground">
-                  Some courts are locked because matches have been generated. Reset individual courts to unlock them.
-                </div>
-              )}
-
-              {/* Courts & Groups Grid */}
+              {/* Courts & Groups Grid — derived from court_count */}
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-                {displayItems.map((item) =>
-                  item.isGroup ? (
-                    <Button
-                      key={item.key}
-                      variant="secondary"
-                      className="h-24 text-base font-semibold rounded-2xl opacity-70 cursor-default flex flex-col items-center justify-center gap-1"
+                {/* 1. Ungrouped courts (ascending) */}
+                {ungroupedCourtNumbers.map((courtNum) => {
+                  const dbCourt = courtsByNumber.get(courtNum);
+                  const status = getCourtStatus(courtNum);
+                  return (
+                    <CourtStatusCard
+                      key={`court-${courtNum}`}
+                      label={`Court ${courtNum}`}
+                      to={dbCourt ? `/admin/court/${dbCourt.id}` : undefined}
+                      status={status}
+                      disabled={!dbCourt}
+                      disabledLabel={!dbCourt ? "Not configured" : undefined}
+                    />
+                  );
+                })}
+
+                {/* 2. Groups (sorted by lowest court number) */}
+                {sortedGroups.map((g) => {
+                  const nums = g.courtNums;
+                  let label: string;
+                  if (nums.length === 2) {
+                    label = `Courts ${nums[0]} & ${nums[1]}`;
+                  } else if (nums.length > 2) {
+                    const last = nums[nums.length - 1];
+                    const rest = nums.slice(0, -1);
+                    label = `Courts ${rest.join(", ")} & ${last}`;
+                  } else {
+                    label = `Court ${nums[0] || "?"}`;
+                  }
+                  const status = getGroupStatus(nums);
+                  return (
+                    <CourtStatusCard
+                      key={`group-${g.id}`}
+                      label={label}
+                      status={status}
                       disabled
-                    >
-                      <span>{item.label}</span>
-                      <span className="text-xs font-normal text-muted-foreground">Coming soon</span>
-                    </Button>
-                  ) : (
-                    <Button
-                      key={item.key}
-                      asChild
-                      variant="secondary"
-                      className="h-24 text-xl font-semibold rounded-2xl hover:bg-primary hover:text-primary-foreground transition-all duration-200"
-                    >
-                      <Link to={`/admin/court/${item.courtId}`}>{item.label}</Link>
-                    </Button>
-                  )
-                )}
-                {displayItems.length === 0 && (
+                      disabledLabel="Coming soon"
+                    />
+                  );
+                })}
+
+                {allCourtNumbers.length === 0 && (
                   <div className="col-span-full text-center py-12 text-muted-foreground">
                     No courts configured yet.
                   </div>
