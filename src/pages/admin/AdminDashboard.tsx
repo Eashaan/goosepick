@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, Settings } from "lucide-react";
+import { toast } from "sonner";
 import PageLayout from "@/components/layout/PageLayout";
 import GlobalHeader from "@/components/layout/GlobalHeader";
 import AdminContextBanner from "@/components/admin/AdminContextBanner";
@@ -57,6 +58,7 @@ const AdminDashboard = () => {
   } = useEventContext();
 
   const [showEditSetup, setShowEditSetup] = useState(false);
+  const [creatingCourtNum, setCreatingCourtNum] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isLoading && !isAdmin) {
@@ -261,6 +263,31 @@ const AdminDashboard = () => {
     setShowEditSetup(false);
   };
 
+  // Auto-create a court DB row + court_state on click, then navigate
+  const handleCourtClick = async (courtNum: number) => {
+    setCreatingCourtNum(courtNum);
+    try {
+      const { data, error } = await supabase
+        .from("courts")
+        .insert({
+          name: `Court ${courtNum}`,
+          event_id: selectedEventId,
+          location_id: selectedLocationId || null,
+          format_type: "mystery_partner" as any,
+        } as any)
+        .select("id")
+        .single();
+      if (error) throw error;
+      // Create court_state
+      await supabase.from("court_state").insert({ court_id: (data as any).id } as any);
+      navigate(`/admin/court/${(data as any).id}`);
+    } catch (err: any) {
+      toast.error("Failed to initialize court: " + err.message);
+    } finally {
+      setCreatingCourtNum(null);
+    }
+  };
+
   const showWizard = !setupCompleted || showEditSetup;
 
   // Locked court numbers for setup wizard
@@ -331,9 +358,9 @@ const AdminDashboard = () => {
                       key={`court-${courtNum}`}
                       label={`Court ${courtNum}`}
                       to={dbCourt ? `/admin/court/${dbCourt.id}` : undefined}
+                      onClick={!dbCourt ? () => handleCourtClick(courtNum) : undefined}
+                      isLoading={creatingCourtNum === courtNum}
                       status={status}
-                      disabled={!dbCourt}
-                      disabledLabel={!dbCourt ? "Not configured" : undefined}
                     />
                   );
                 })}
