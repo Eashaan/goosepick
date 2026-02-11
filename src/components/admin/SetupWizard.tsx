@@ -32,7 +32,7 @@ interface SetupWizardProps {
   existingCourtCount?: number;
   existingGroups?: CourtGroup[];
   existingCourtFormats?: Record<number, FormatType>;
-  isLocked?: boolean;
+  lockedCourtIds?: Set<number>;
   onComplete: () => void;
 }
 
@@ -44,7 +44,7 @@ const SetupWizard = ({
   existingCourtCount,
   existingGroups = [],
   existingCourtFormats = {},
-  isLocked = false,
+  lockedCourtIds = new Set(),
   onComplete,
 }: SetupWizardProps) => {
   const queryClient = useQueryClient();
@@ -57,6 +57,20 @@ const SetupWizard = ({
   const [pendingGroup, setPendingGroup] = useState<number[]>([]);
 
   const allCourtNumbers = Array.from({ length: courtCount }, (_, i) => i + 1);
+
+  // Per-unit lock helpers
+  const isCourtLocked = (courtNum: number): boolean => {
+    // Find actual court ID from DB courts — courtNum is 1-indexed label
+    // lockedCourtIds contains DB court IDs, but we need to map court numbers to IDs
+    // For now, we check if any locked court has this number in its name
+    return lockedCourtIds.has(courtNum);
+  };
+
+  const isGroupLocked = (courtNumbers: number[]): boolean => {
+    return courtNumbers.some((n) => lockedCourtIds.has(n));
+  };
+
+  const hasAnyLockedCourts = lockedCourtIds.size > 0;
 
   // Courts that are already in a group
   const groupedCourts = new Set(groups.flatMap((g) => g.courtNumbers));
@@ -262,19 +276,8 @@ const SetupWizard = ({
     },
   });
 
-  if (isLocked) {
-    return (
-      <Card className="bg-card border-border">
-        <CardContent className="py-8 text-center space-y-3">
-          <Lock className="h-8 w-8 mx-auto text-muted-foreground" />
-          <p className="text-lg font-medium text-foreground">Setup is locked</p>
-          <p className="text-sm text-muted-foreground">
-            Setup is locked once matches are generated.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
+  // Court count cannot be reduced below locked courts
+  const maxLockedCourtNum = allCourtNumbers.filter((n) => isCourtLocked(n)).reduce((max, n) => Math.max(max, n), 0);
 
   return (
     <div className="space-y-6">
@@ -299,17 +302,22 @@ const SetupWizard = ({
           <CardContent className="space-y-4">
             <Input
               type="number"
-              min={1}
+              min={Math.max(1, maxLockedCourtNum)}
               max={50}
               value={courtCount}
               onChange={(e) => {
                 const v = parseInt(e.target.value) || 1;
-                setCourtCount(Math.max(1, Math.min(50, v)));
+                setCourtCount(Math.max(maxLockedCourtNum || 1, Math.min(50, v)));
               }}
               className="text-center text-2xl h-14 font-semibold"
             />
+            {maxLockedCourtNum > 0 && (
+              <p className="text-xs text-muted-foreground text-center">
+                Cannot reduce below {maxLockedCourtNum} (locked courts exist)
+              </p>
+            )}
             <p className="text-sm text-muted-foreground text-center">
-              Enter a number between 1 and 50
+              Enter a number between {Math.max(1, maxLockedCourtNum)} and 50
             </p>
             <Button
               className="w-full h-12 rounded-xl"
@@ -336,14 +344,24 @@ const SetupWizard = ({
             {groups.length > 0 && (
               <div className="space-y-2">
                 <p className="text-sm font-medium text-muted-foreground">Groups</p>
-                {groups.map((g, idx) => (
-                  <div key={idx} className="flex items-center justify-between rounded-lg bg-secondary p-3">
-                    <span className="font-medium">{formatGroupLabel(g.courtNumbers)}</span>
-                    <Button size="icon" variant="ghost" onClick={() => removeGroup(idx)}>
-                      <X className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                ))}
+                {groups.map((g, idx) => {
+                  const groupLocked = isGroupLocked(g.courtNumbers);
+                  return (
+                    <div key={idx} className={`flex items-center justify-between rounded-lg p-3 ${groupLocked ? "bg-muted/50" : "bg-secondary"}`}>
+                      <span className="font-medium flex items-center gap-2">
+                        {formatGroupLabel(g.courtNumbers)}
+                        {groupLocked && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
+                      </span>
+                      {groupLocked ? (
+                        <span className="text-xs text-muted-foreground">Locked</span>
+                      ) : (
+                        <Button size="icon" variant="ghost" onClick={() => removeGroup(idx)}>
+                          <X className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -352,7 +370,7 @@ const SetupWizard = ({
               <div className="space-y-2">
                 <p className="text-sm font-medium text-muted-foreground">Select courts to group</p>
                 <div className="flex flex-wrap gap-2">
-                  {ungroupedCourts.map((n) => (
+                  {ungroupedCourts.filter((n) => !isCourtLocked(n)).map((n) => (
                     <Badge
                       key={n}
                       variant={pendingGroup.includes(n) ? "default" : "secondary"}
@@ -360,6 +378,15 @@ const SetupWizard = ({
                       onClick={() => togglePendingCourt(n)}
                     >
                       Court {n}
+                    </Badge>
+                  ))}
+                  {ungroupedCourts.filter((n) => isCourtLocked(n)).map((n) => (
+                    <Badge
+                      key={n}
+                      variant="secondary"
+                      className="text-sm px-3 py-1.5 opacity-50 cursor-not-allowed"
+                    >
+                      Court {n} <Lock className="h-3 w-3 ml-1" />
                     </Badge>
                   ))}
                 </div>
@@ -398,39 +425,57 @@ const SetupWizard = ({
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-3">
-              {formatItems.map((item) => (
-                <div
-                  key={item.key}
-                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg bg-secondary p-3"
-                >
-                  <span className="font-medium text-sm">{item.label}</span>
-                  <Select
-                    value={getFormat(item)}
-                    onValueChange={(v) => setFormat(item, v as FormatType)}
+              {formatItems.map((item) => {
+                const unitLocked = item.isGroup && item.groupIdx !== undefined
+                  ? isGroupLocked(groups[item.groupIdx].courtNumbers)
+                  : item.courtNumber !== undefined && isCourtLocked(item.courtNumber);
+
+                return (
+                  <div
+                    key={item.key}
+                    className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg p-3 ${unitLocked ? "bg-muted/50" : "bg-secondary"}`}
                   >
-                    <SelectTrigger className="w-full sm:w-[180px] h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {FORMAT_OPTIONS.map((opt) => (
-                        <SelectItem
-                          key={opt.value}
-                          value={opt.value}
-                          disabled={!opt.enabled}
-                          className={!opt.enabled ? "text-muted-foreground" : ""}
-                        >
-                          <span className="flex items-center gap-2">
-                            {opt.label}
-                            {!opt.enabled && (
-                              <span className="text-xs text-muted-foreground">(coming soon)</span>
-                            )}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ))}
+                    <span className="font-medium text-sm flex items-center gap-2">
+                      {item.label}
+                      {unitLocked && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
+                    </span>
+                    {unitLocked ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {FORMAT_OPTIONS.find(o => o.value === getFormat(item))?.label || "Mystery Partner"}
+                        </span>
+                        <span className="text-xs text-muted-foreground italic">Locked — reset to modify</span>
+                      </div>
+                    ) : (
+                      <Select
+                        value={getFormat(item)}
+                        onValueChange={(v) => setFormat(item, v as FormatType)}
+                      >
+                        <SelectTrigger className="w-full sm:w-[180px] h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FORMAT_OPTIONS.map((opt) => (
+                            <SelectItem
+                              key={opt.value}
+                              value={opt.value}
+                              disabled={!opt.enabled}
+                              className={!opt.enabled ? "text-muted-foreground" : ""}
+                            >
+                              <span className="flex items-center gap-2">
+                                {opt.label}
+                                {!opt.enabled && (
+                                  <span className="text-xs text-muted-foreground">(coming soon)</span>
+                                )}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             <div className="flex gap-3">

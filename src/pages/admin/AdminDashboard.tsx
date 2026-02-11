@@ -121,18 +121,28 @@ const AdminDashboard = () => {
     enabled: isContextValid && !!sessionConfig?.setup_completed,
   });
 
-  // Check if any matches exist (for lock detection)
-  const { data: hasMatches = false } = useQuery({
-    queryKey: ["has_matches", selectedEventId, selectedLocationId],
+  // Check which courts have matches (for per-court lock detection)
+  // Returns a Set of court numbers (extracted from court names like "Court 1")
+  const { data: lockedCourtNumbers = new Set<number>() } = useQuery({
+    queryKey: ["locked_courts", selectedEventId, selectedLocationId, courts.map(c => c.id).join(",")],
     queryFn: async () => {
       const courtIds = courts.map((c) => c.id);
-      if (courtIds.length === 0) return false;
-      const { count, error } = await supabase
+      if (courtIds.length === 0) return new Set<number>();
+      const { data, error } = await supabase
         .from("matches")
-        .select("id", { count: "exact", head: true })
+        .select("court_id")
         .in("court_id", courtIds);
-      if (error) return false;
-      return (count || 0) > 0;
+      if (error) return new Set<number>();
+      // Map DB court_ids back to court numbers
+      const lockedDbIds = new Set((data || []).map((m) => m.court_id));
+      const courtNumbers = new Set<number>();
+      courts.forEach((c) => {
+        if (lockedDbIds.has(c.id)) {
+          const num = parseInt(c.name.replace("Court ", ""));
+          if (!isNaN(num)) courtNumbers.add(num);
+        }
+      });
+      return courtNumbers;
     },
     enabled: courts.length > 0,
   });
@@ -152,7 +162,7 @@ const AdminDashboard = () => {
   }
 
   const setupCompleted = sessionConfig?.setup_completed === true;
-  const isSetupLocked = setupCompleted && hasMatches;
+  const hasAnyMatches = lockedCourtNumbers.size > 0;
 
   // Build grouped court IDs set
   const groupedCourtIdSet = new Set(courtGroups.flatMap((g) => g.court_ids));
@@ -205,7 +215,7 @@ const AdminDashboard = () => {
                 <p className="text-xs text-muted-foreground">Signed in as {user.email}</p>
               )}
             </div>
-            {setupCompleted && !showEditSetup && !isSetupLocked && (
+            {setupCompleted && !showEditSetup && (
               <Button variant="ghost" size="icon" onClick={() => setShowEditSetup(true)}>
                 <Settings className="h-5 w-5" />
               </Button>
@@ -219,15 +229,15 @@ const AdminDashboard = () => {
               locationId={selectedLocationId}
               existingConfigId={sessionConfig?.id}
               existingCourtCount={sessionConfig?.court_count}
-              isLocked={isSetupLocked}
+              lockedCourtIds={lockedCourtNumbers}
               onComplete={handleSetupComplete}
             />
           ) : (
             <>
-              {/* Locked banner */}
-              {isSetupLocked && (
+              {/* Per-court lock info */}
+              {hasAnyMatches && (
                 <div className="mb-4 rounded-lg bg-muted/50 p-3 text-center text-sm text-muted-foreground">
-                  Setup is locked once matches are generated.
+                  Some courts are locked because matches have been generated. Reset individual courts to unlock them.
                 </div>
               )}
 
