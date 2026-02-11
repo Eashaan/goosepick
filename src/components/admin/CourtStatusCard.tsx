@@ -10,6 +10,8 @@ interface CourtStatusCardProps {
   status: CourtStatus;
   disabled?: boolean;
   disabledLabel?: string;
+  onClick?: () => void;
+  isLoading?: boolean;
 }
 
 const statusStyles: Record<CourtStatus, { border: string; dot: string; glow?: string }> = {
@@ -32,7 +34,7 @@ const statusStyles: Record<CourtStatus, { border: string; dot: string; glow?: st
   },
 };
 
-const CourtStatusCard = ({ label, to, status, disabled, disabledLabel }: CourtStatusCardProps) => {
+const CourtStatusCard = ({ label, to, status, disabled, disabledLabel, onClick, isLoading }: CourtStatusCardProps) => {
   const style = statusStyles[status];
 
   const dot = status !== "setup" && (
@@ -60,6 +62,24 @@ const CourtStatusCard = ({ label, to, status, disabled, disabledLabel }: CourtSt
         {disabledLabel && (
           <span className="text-xs font-normal text-muted-foreground">{disabledLabel}</span>
         )}
+        {dot}
+      </Button>
+    );
+  }
+
+  // onClick variant (for auto-creating court then navigating)
+  if (onClick && !to) {
+    return (
+      <Button
+        variant="secondary"
+        className={cn(
+          "h-24 text-xl font-semibold rounded-2xl hover:bg-primary hover:text-primary-foreground transition-all duration-200 relative border",
+          style.border,
+          isLoading && "opacity-60 pointer-events-none"
+        )}
+        onClick={onClick}
+      >
+        {label}
         {dot}
       </Button>
     );
