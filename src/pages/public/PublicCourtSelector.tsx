@@ -1,89 +1,28 @@
 import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft } from "lucide-react";
 import PageLayout from "@/components/layout/PageLayout";
 import GlobalHeader from "@/components/layout/GlobalHeader";
 import { useEventContext } from "@/hooks/useEventContext";
-
-interface CourtGroup {
-  id: string;
-  court_ids: number[];
-}
+import { useScopedCourts } from "@/hooks/useScopedCourts";
 
 const PublicCourtSelector = () => {
   const navigate = useNavigate();
   const {
-    selectedCityId,
-    selectedEventId,
-    selectedLocationId,
     selectedEvent,
     selectedLocation,
-    requiresLocation,
     isContextValid,
     clearSelection,
   } = useEventContext();
+
+  const { renderItems, configLoading } = useScopedCourts();
 
   useEffect(() => {
     if (!isContextValid) {
       navigate("/", { replace: true });
     }
   }, [isContextValid, navigate]);
-
-  // Fetch session config
-  const { data: sessionConfig } = useQuery({
-    queryKey: ["session_config", selectedCityId, selectedEventId, selectedLocationId],
-    queryFn: async () => {
-      let query = supabase
-        .from("session_configs" as any)
-        .select("*")
-        .eq("city_id", selectedCityId)
-        .eq("event_id", selectedEventId!);
-      if (selectedLocationId) {
-        query = query.eq("location_id", selectedLocationId);
-      } else {
-        query = query.is("location_id", null);
-      }
-      const { data, error } = await query.maybeSingle();
-      if (error) throw error;
-      return data as unknown as { id: string; setup_completed: boolean } | null;
-    },
-    enabled: isContextValid,
-  });
-
-  // Fetch court groups
-  const { data: courtGroups = [] } = useQuery({
-    queryKey: ["court_groups", sessionConfig?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("court_groups" as any)
-        .select("*")
-        .eq("session_config_id", sessionConfig!.id);
-      if (error) throw error;
-      return (data || []) as unknown as CourtGroup[];
-    },
-    enabled: !!sessionConfig?.id,
-  });
-
-  // Fetch courts
-  const { data: courts = [] } = useQuery({
-    queryKey: ["courts", selectedEventId, selectedLocationId],
-    queryFn: async () => {
-      let query = supabase.from("courts").select("*").order("id");
-      if (selectedEventId) query = query.eq("event_id", selectedEventId);
-      if (selectedLocationId) {
-        query = query.eq("location_id", selectedLocationId);
-      } else if (selectedEventId && !requiresLocation) {
-        query = query.is("location_id", null);
-      }
-      const { data, error } = await query;
-      if (error) throw error;
-      return data;
-    },
-    enabled: isContextValid,
-  });
 
   const handleBackToHome = () => {
     clearSelection();
@@ -97,30 +36,6 @@ const PublicCourtSelector = () => {
     : "";
 
   if (!isContextValid) return null;
-
-  // Build display items with group awareness
-  const groupedCourtIdSet = new Set(courtGroups.flatMap((g) => g.court_ids));
-  const ungroupedCourts = courts.filter((c) => !groupedCourtIdSet.has(c.id));
-
-  const displayItems: { key: string; label: string; isGroup: boolean; courtId?: number }[] = [];
-
-  ungroupedCourts.forEach((c) => {
-    displayItems.push({ key: `court-${c.id}`, label: c.name, isGroup: false, courtId: c.id });
-  });
-
-  courtGroups.forEach((g) => {
-    const groupCourts = courts.filter((c) => g.court_ids.includes(c.id)).sort((a, b) => a.id - b.id);
-    const numbers = groupCourts.map((c) => c.name.replace("Court ", ""));
-    let label: string;
-    if (numbers.length === 2) {
-      label = `Courts ${numbers[0]} & ${numbers[1]}`;
-    } else {
-      const last = numbers[numbers.length - 1];
-      const rest = numbers.slice(0, -1);
-      label = `Courts ${rest.join(", ")} & ${last}`;
-    }
-    displayItems.push({ key: `group-${g.id}`, label, isGroup: true });
-  });
 
   return (
     <PageLayout>
@@ -138,8 +53,8 @@ const PublicCourtSelector = () => {
           </div>
 
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-            {displayItems.map((item) =>
-              item.isGroup ? (
+            {renderItems.map((item) =>
+              item.type === "group" ? (
                 <Button
                   key={item.key}
                   variant="secondary"
@@ -156,11 +71,13 @@ const PublicCourtSelector = () => {
                   variant="secondary"
                   className="h-24 text-xl font-semibold rounded-2xl hover:bg-primary hover:text-primary-foreground transition-all duration-200"
                 >
-                  <Link to={`/public/court/${item.courtId}`}>{item.label}</Link>
+                  <Link to={item.courtId ? `/public/court/${item.courtId}` : "#"}>
+                    {item.label}
+                  </Link>
                 </Button>
               )
             )}
-            {displayItems.length === 0 && courts.length === 0 && (
+            {renderItems.length === 0 && !configLoading && (
               <div className="col-span-full text-center py-12 text-muted-foreground">
                 No courts found for this event/location.
               </div>

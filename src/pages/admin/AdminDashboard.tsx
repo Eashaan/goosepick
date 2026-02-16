@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, Settings } from "lucide-react";
 import { toast } from "sonner";
@@ -13,35 +13,7 @@ import SessionSummaryStrip from "@/components/admin/SessionSummaryStrip";
 import CourtStatusCard, { type CourtStatus } from "@/components/admin/CourtStatusCard";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useEventContext } from "@/hooks/useEventContext";
-
-interface SessionConfig {
-  id: string;
-  city_id: string;
-  event_id: string;
-  event_type: "social" | "thursdays";
-  location_id: string | null;
-  court_count: number;
-  setup_completed: boolean;
-}
-
-interface CourtUnit {
-  id: string;
-  city_id: string;
-  event_type: "social" | "thursdays";
-  location_id: string | null;
-  type: "court" | "group";
-  court_number: number | null;
-  group_court_numbers: number[] | null;
-  display_name: string;
-  format_type: string;
-  is_locked: boolean;
-  court_id: number | null;
-}
-
-interface CourtState {
-  court_id: number;
-  phase: "idle" | "in_progress" | "completed";
-}
+import { useScopedCourts, type RenderItem } from "@/hooks/useScopedCourts";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -50,28 +22,36 @@ const AdminDashboard = () => {
     selectedCityId,
     selectedEventId,
     selectedLocationId,
-    selectedEvent,
-    selectedLocation,
-    requiresLocation,
     isContextValid,
     clearSelection,
     scopeEventType,
   } = useEventContext();
 
+  const {
+    sessionConfig,
+    configLoading,
+    courtUnits,
+    courtCount,
+    setupCompleted,
+    renderItems,
+    warnings,
+  } = useScopedCourts();
+
   const [showEditSetup, setShowEditSetup] = useState(false);
   const [creatingCourtNum, setCreatingCourtNum] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!isLoading && !isAdmin) {
-      navigate("/admin/login");
-    }
+    if (!isLoading && !isAdmin) navigate("/admin/login");
   }, [isLoading, isAdmin, navigate]);
 
   useEffect(() => {
-    if (!isLoading && isAdmin && !isContextValid) {
-      navigate("/", { replace: true });
-    }
+    if (!isLoading && isAdmin && !isContextValid) navigate("/", { replace: true });
   }, [isLoading, isAdmin, isContextValid, navigate]);
+
+  // Log warnings for admins
+  useEffect(() => {
+    warnings.forEach((w) => toast.warning(w));
+  }, [warnings]);
 
   const handleLogout = async () => {
     await signOut();
@@ -84,79 +64,12 @@ const AdminDashboard = () => {
     navigate("/");
   };
 
-  // 1. Fetch session config scoped by city + event_type + location
-  const { data: sessionConfig, isLoading: configLoading } = useQuery({
-    queryKey: ["session_config", selectedCityId, scopeEventType, selectedLocationId],
-    queryFn: async () => {
-      let query = supabase
-        .from("session_configs" as any)
-        .select("*")
-        .eq("city_id", selectedCityId)
-        .eq("event_type", scopeEventType!);
-
-      if (selectedLocationId) {
-        query = query.eq("location_id", selectedLocationId);
-      } else {
-        query = query.is("location_id", null);
-      }
-
-      const { data, error } = await query.maybeSingle();
-      if (error) throw error;
-      return data as unknown as SessionConfig | null;
-    },
-    enabled: isContextValid && !!scopeEventType,
-  });
-
-  // 2. Fetch court_units scoped by city + event_type + location
-  const { data: courtUnits = [] } = useQuery({
-    queryKey: ["court_units", selectedCityId, scopeEventType, selectedLocationId],
-    queryFn: async () => {
-      let query = supabase
-        .from("court_units" as any)
-        .select("*")
-        .eq("city_id", selectedCityId)
-        .eq("event_type", scopeEventType!);
-
-      if (selectedLocationId) {
-        query = query.eq("location_id", selectedLocationId);
-      } else {
-        query = query.is("location_id", null);
-      }
-
-      const { data, error } = await (query as any).order("court_number", { nullsFirst: false });
-      if (error) throw error;
-      return (data || []) as unknown as CourtUnit[];
-    },
-    enabled: isContextValid && !!scopeEventType && !!sessionConfig?.setup_completed,
-  });
-
-  // Partition court_units
-  const courtTypeUnits = courtUnits.filter((u) => u.type === "court");
-  const groupTypeUnits = courtUnits.filter((u) => u.type === "group");
-
-  // Grouped court numbers (from all groups)
-  const groupedCourtNumbers = new Set<number>();
-  groupTypeUnits.forEach((g) => {
-    (g.group_court_numbers || []).forEach((n) => groupedCourtNumbers.add(n));
-  });
-
-  // Ungrouped courts = court-type units whose court_number is NOT in any group
-  const ungroupedUnits = courtTypeUnits
-    .filter((u) => u.court_number !== null && !groupedCourtNumbers.has(u.court_number!))
-    .sort((a, b) => (a.court_number || 0) - (b.court_number || 0));
-
-  // Groups sorted by min court number
-  const sortedGroups = [...groupTypeUnits].sort((a, b) => {
-    const aMin = Math.min(...(a.group_court_numbers || [0]));
-    const bMin = Math.min(...(b.group_court_numbers || [0]));
-    return aMin - bMin;
-  });
-
-  // 3. Fetch court_state for all linked court_ids
+  // ── Linked court IDs for status queries ──
   const linkedCourtIds = courtUnits
-    .filter((u) => u.court_id != null)
-    .map((u) => u.court_id!);
+    .filter((u: any) => u.court_id != null)
+    .map((u: any) => u.court_id!);
 
+  // Fetch court_state
   const { data: courtStates = [] } = useQuery({
     queryKey: ["court_states_dashboard", linkedCourtIds.join(",")],
     queryFn: async () => {
@@ -166,12 +79,12 @@ const AdminDashboard = () => {
         .select("court_id, phase")
         .in("court_id", linkedCourtIds);
       if (error) return [];
-      return (data || []) as CourtState[];
+      return (data || []) as { court_id: number; phase: "idle" | "in_progress" | "completed" }[];
     },
     enabled: linkedCourtIds.length > 0,
   });
 
-  // 4. Fetch match counts per court
+  // Fetch match counts
   const { data: courtMatchCounts = new Map<number, number>() } = useQuery({
     queryKey: ["court_match_counts", linkedCourtIds.join(",")],
     queryFn: async () => {
@@ -182,15 +95,13 @@ const AdminDashboard = () => {
         .in("court_id", linkedCourtIds);
       if (error) return new Map<number, number>();
       const counts = new Map<number, number>();
-      (data || []).forEach((m) => {
-        counts.set(m.court_id, (counts.get(m.court_id) || 0) + 1);
-      });
+      (data || []).forEach((m) => counts.set(m.court_id, (counts.get(m.court_id) || 0) + 1));
       return counts;
     },
     enabled: linkedCourtIds.length > 0,
   });
 
-  // 5. Fetch rotation audit fairness scores per court
+  // Fetch fairness scores
   const { data: fairnessScores = new Map<number, number>() } = useQuery({
     queryKey: ["rotation_audit_scores", linkedCourtIds.join(",")],
     queryFn: async () => {
@@ -201,9 +112,7 @@ const AdminDashboard = () => {
         .in("court_id", linkedCourtIds);
       if (error) return new Map<number, number>();
       const scores = new Map<number, number>();
-      (data || []).forEach((r: any) => {
-        scores.set(r.court_id, Number(r.fairness_score));
-      });
+      (data || []).forEach((r: any) => scores.set(r.court_id, Number(r.fairness_score)));
       return scores;
     },
     enabled: linkedCourtIds.length > 0,
@@ -219,15 +128,29 @@ const AdminDashboard = () => {
     );
   }
 
-  if (!isAdmin || !isContextValid) {
-    return null;
-  }
+  if (!isAdmin || !isContextValid) return null;
 
-  const setupCompleted = sessionConfig?.setup_completed === true;
-  const courtCount = sessionConfig?.court_count || 0;
+  // ── Status helpers ──
+  const getItemStatus = (item: RenderItem): CourtStatus => {
+    if (item.type === "group") {
+      // Aggregate: find constituent court units
+      const courtNums = item.courtNumbers || [];
+      const constituentUnits = courtUnits.filter(
+        (u: any) => u.type === "court" && u.court_number != null && courtNums.includes(u.court_number!)
+      );
+      const statuses = constituentUnits.map((u: any) => getCourtUnitStatus(u));
+      if (statuses.includes("live")) return "live";
+      if (statuses.includes("completed")) return "completed";
+      if (statuses.includes("locked")) return "locked";
+      return "setup";
+    }
+    // Find the court_unit for this item
+    const unit = courtUnits.find((u: any) => u.id === item.unitId);
+    if (!unit) return "setup";
+    return getCourtUnitStatus(unit);
+  };
 
-  // === STATUS HELPERS ===
-  const getUnitStatus = (unit: CourtUnit): CourtStatus => {
+  const getCourtUnitStatus = (unit: any): CourtStatus => {
     if (!unit.court_id) return "setup";
     const matchCount = courtMatchCounts.get(unit.court_id) || 0;
     if (matchCount === 0) return "setup";
@@ -237,57 +160,36 @@ const AdminDashboard = () => {
     return "locked";
   };
 
-  const getGroupStatus = (group: CourtUnit): CourtStatus => {
-    const courtNums = group.group_court_numbers || [];
-    const constituentUnits = courtTypeUnits.filter(
-      (u) => u.court_number !== null && courtNums.includes(u.court_number!)
-    );
-    const statuses = constituentUnits.map(getUnitStatus);
-    if (statuses.includes("live")) return "live";
-    if (statuses.includes("completed")) return "completed";
-    if (statuses.includes("locked")) return "locked";
-    return "setup";
-  };
+  // ── Summary counts ──
+  const allStatuses = renderItems.map(getItemStatus);
+  const activeCount = allStatuses.filter((s) => s !== "setup").length;
+  const liveCount = allStatuses.filter((s) => s === "live").length;
 
-  // === SUMMARY COUNTS ===
-  const allUnitStatuses: CourtStatus[] = [
-    ...ungroupedUnits.map(getUnitStatus),
-    ...sortedGroups.map(getGroupStatus),
-  ];
-  const activeCount = allUnitStatuses.filter((s) => s !== "setup").length;
-  const liveCount = allUnitStatuses.filter((s) => s === "live").length;
+  const handleSetupComplete = () => setShowEditSetup(false);
 
-  const handleSetupComplete = () => {
-    setShowEditSetup(false);
-  };
-
-  // Auto-create court DB row + link court_unit on click, then navigate
-  const handleCourtClick = async (unit: CourtUnit) => {
-    if (!unit.court_number) return;
-    setCreatingCourtNum(unit.court_number);
+  // Auto-create court row on click
+  const handleCourtClick = async (item: RenderItem) => {
+    if (!item.courtNumber) return;
+    setCreatingCourtNum(item.courtNumber);
     try {
-      // Create courts row
       const { data, error } = await supabase
         .from("courts")
         .insert({
-          name: `Court ${unit.court_number}`,
+          name: `Court ${item.courtNumber}`,
           event_id: selectedEventId,
           location_id: selectedLocationId || null,
-          format_type: unit.format_type as any,
+          format_type: (item.formatType || "mystery_partner") as any,
         } as any)
         .select("id")
         .single();
       if (error) throw error;
       const courtId = (data as any).id;
 
-      // Create court_state
       await supabase.from("court_state").insert({ court_id: courtId } as any);
-
-      // Link court_unit to the new court
       await supabase
         .from("court_units" as any)
         .update({ court_id: courtId } as any)
-        .eq("id", unit.id);
+        .eq("id", item.unitId);
 
       navigate(`/admin/court/${courtId}`);
     } catch (err: any) {
@@ -301,7 +203,7 @@ const AdminDashboard = () => {
 
   // Locked court numbers for setup wizard
   const lockedCourtNumbers = new Set<number>();
-  courtTypeUnits.forEach((u) => {
+  courtUnits.forEach((u: any) => {
     if (u.court_id && (courtMatchCounts.get(u.court_id) || 0) > 0 && u.court_number) {
       lockedCourtNumbers.add(u.court_number);
     }
@@ -336,7 +238,7 @@ const AdminDashboard = () => {
             <div className="mb-8">
               <SessionSummaryStrip
                 totalCourts={courtCount}
-                groupCount={sortedGroups.length}
+                groupCount={renderItems.filter((i) => i.type === "group").length}
                 activeCount={activeCount}
                 liveCount={liveCount}
               />
@@ -355,47 +257,45 @@ const AdminDashboard = () => {
               onComplete={handleSetupComplete}
             />
           ) : (
-            <>
-              {/* Courts & Groups Grid — derived from court_units */}
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-                {/* 1. Ungrouped courts (ascending) */}
-                {ungroupedUnits.map((unit) => {
-                  const status = getUnitStatus(unit);
-                  const score = unit.court_id ? fairnessScores.get(unit.court_id) ?? null : null;
-                  return (
-                    <CourtStatusCard
-                      key={`court-${unit.id}`}
-                      label={unit.display_name}
-                      to={unit.court_id ? `/admin/court/${unit.court_id}` : undefined}
-                      onClick={!unit.court_id ? () => handleCourtClick(unit) : undefined}
-                      isLoading={creatingCourtNum === unit.court_number}
-                      status={status}
-                      fairnessScore={score}
-                    />
-                  );
-                })}
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+              {renderItems.map((item) => {
+                const status = getItemStatus(item);
+                const score =
+                  item.type === "court" && item.courtId
+                    ? fairnessScores.get(item.courtId) ?? null
+                    : null;
 
-                {/* 2. Groups (sorted by lowest court number) */}
-                {sortedGroups.map((group) => {
-                  const status = getGroupStatus(group);
+                if (item.type === "group") {
                   return (
                     <CourtStatusCard
-                      key={`group-${group.id}`}
-                      label={group.display_name}
+                      key={item.key}
+                      label={item.label}
                       status={status}
                       disabled
                       disabledLabel="Coming soon"
                     />
                   );
-                })}
+                }
 
-                {ungroupedUnits.length === 0 && sortedGroups.length === 0 && (
-                  <div className="col-span-full text-center py-12 text-muted-foreground">
-                    No courts configured yet.
-                  </div>
-                )}
-              </div>
-            </>
+                return (
+                  <CourtStatusCard
+                    key={item.key}
+                    label={item.label}
+                    to={item.courtId ? `/admin/court/${item.courtId}` : undefined}
+                    onClick={!item.courtId ? () => handleCourtClick(item) : undefined}
+                    isLoading={creatingCourtNum === item.courtNumber}
+                    status={status}
+                    fairnessScore={score}
+                  />
+                );
+              })}
+
+              {renderItems.length === 0 && (
+                <div className="col-span-full text-center py-12 text-muted-foreground">
+                  No courts configured yet.
+                </div>
+              )}
+            </div>
           )}
 
           <div className="mt-12 text-center">
