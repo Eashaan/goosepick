@@ -43,6 +43,7 @@ const AdminDashboard = () => {
 
   const [showEditSetup, setShowEditSetup] = useState(false);
   const [creatingCourtNum, setCreatingCourtNum] = useState<number | null>(null);
+  const [creatingGroupId, setCreatingGroupId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoading && !isAdmin) navigate("/admin/login");
@@ -203,6 +204,43 @@ const AdminDashboard = () => {
     }
   };
 
+  // Auto-create court_groups row on group click
+  const handleGroupClick = async (item: RenderItem) => {
+    if (!item.unitId || !item.courtNumbers) return;
+    setCreatingGroupId(item.unitId);
+    try {
+      // Check if a court_groups row already exists for these court numbers in this scope
+      const { data: existing } = await supabase
+        .from("court_groups")
+        .select("id")
+        .eq("session_config_id", sessionConfig?.id || "")
+        .maybeSingle();
+
+      if (existing) {
+        navigate(`/admin/group/${existing.id}`);
+        return;
+      }
+
+      // Create new court_groups row
+      const { data, error } = await supabase
+        .from("court_groups")
+        .insert({
+          court_ids: item.courtNumbers,
+          session_config_id: sessionConfig!.id,
+          session_id: activeSession?.id || null,
+          format_type: "mystery_partner",
+        } as any)
+        .select("id")
+        .single();
+      if (error) throw error;
+      navigate(`/admin/group/${(data as any).id}`);
+    } catch (err: any) {
+      toast.error("Failed to initialize group: " + err.message);
+    } finally {
+      setCreatingGroupId(null);
+    }
+  };
+
   const showWizard = !setupCompleted || showEditSetup;
 
   // Locked court numbers for setup wizard
@@ -276,17 +314,17 @@ const AdminDashboard = () => {
                     ? fairnessScores.get(item.courtId) ?? null
                     : null;
 
-                if (item.type === "group") {
-                  return (
-                    <CourtStatusCard
-                      key={item.key}
-                      label={item.label}
-                      status={status}
-                      disabled
-                      disabledLabel="Coming soon"
-                    />
-                  );
-                }
+                  if (item.type === "group") {
+                    return (
+                      <CourtStatusCard
+                        key={item.key}
+                        label={item.label}
+                        onClick={() => handleGroupClick(item)}
+                        isLoading={creatingGroupId === item.unitId}
+                        status={status}
+                      />
+                    );
+                  }
 
                 return (
                   <CourtStatusCard

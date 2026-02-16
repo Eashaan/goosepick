@@ -9,6 +9,7 @@ import NotFound from "./pages/NotFound";
 import AdminLogin from "./pages/admin/AdminLogin";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminCourt from "./pages/admin/AdminCourt";
+import AdminGroup from "./pages/admin/AdminGroup";
 import PublicCourtSelector from "./pages/public/PublicCourtSelector";
 import PublicCourt from "./pages/public/PublicCourt";
 
@@ -26,6 +27,7 @@ const App = () => (
             <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/court/:courtId" element={<AdminCourt />} />
+            <Route path="/admin/group/:groupId" element={<AdminGroup />} />
             <Route path="/public" element={<PublicCourtSelector />} />
             <Route path="/public/court/:courtId" element={<PublicCourt />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

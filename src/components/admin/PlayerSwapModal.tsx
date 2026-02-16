@@ -39,6 +39,7 @@ interface PlayerSwapModalProps {
   currentPlayerName: string;
   allPlayers: Player[];
   matchPlayerIds: (string | null)[];
+  groupId?: string;
 }
 
 const PlayerSwapModal = ({
@@ -51,6 +52,7 @@ const PlayerSwapModal = ({
   currentPlayerName,
   allPlayers,
   matchPlayerIds,
+  groupId,
 }: PlayerSwapModalProps) => {
   const queryClient = useQueryClient();
   const [selectedTab, setSelectedTab] = useState<"existing" | "guest">("existing");
@@ -77,14 +79,20 @@ const PlayerSwapModal = ({
       }
 
       // Create new guest player
+      const insertData: any = {
+        name: trimmedName,
+        is_guest: true,
+        added_by_admin: true,
+      };
+      if (groupId) {
+        insertData.group_id = groupId;
+      } else {
+        insertData.court_id = courtId;
+      }
+
       const { data, error } = await supabase
         .from("players")
-        .insert({
-          court_id: courtId,
-          name: trimmedName,
-          is_guest: true,
-          added_by_admin: true,
-        })
+        .insert(insertData)
         .select()
         .single();
 
@@ -111,23 +119,34 @@ const PlayerSwapModal = ({
       if (matchError) throw matchError;
 
       // Insert audit record
+      const auditData: any = {
+        match_id: matchId,
+        replaced_player_id: currentPlayerId,
+        substitute_player_id: substitutePlayerId,
+      };
+      if (groupId) {
+        auditData.group_id = groupId;
+        auditData.court_id = 0; // placeholder for non-null constraint
+      } else {
+        auditData.court_id = courtId;
+      }
+
       const { error: auditError } = await supabase
         .from("match_substitutions")
-        .insert({
-          court_id: courtId,
-          match_id: matchId,
-          replaced_player_id: currentPlayerId,
-          substitute_player_id: substitutePlayerId,
-        });
+        .insert(auditData);
 
       if (auditError) {
         console.error("Audit insert failed:", auditError);
-        // Don't throw - audit is secondary to the swap operation
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["matches", courtId] });
-      queryClient.invalidateQueries({ queryKey: ["players", courtId] });
+      if (groupId) {
+        queryClient.invalidateQueries({ queryKey: ["group_matches", groupId] });
+        queryClient.invalidateQueries({ queryKey: ["group_players", groupId] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["matches", courtId] });
+        queryClient.invalidateQueries({ queryKey: ["players", courtId] });
+      }
       toast.success("Player swapped successfully");
       handleClose();
     },
