@@ -231,6 +231,62 @@ serve(async (req) => {
       console.error("Database error updating court state:", stateError);
     }
 
+    // === ROTATION AUDIT ===
+    try {
+      // Compute opponent repeats
+      const opponentCounts: Record<string, number> = {};
+      const makePairKey = (a: string, b: string) => [a, b].sort().join("-");
+      for (const m of result.matches) {
+        const team1 = [m.team1_player1_id, m.team1_player2_id];
+        const team2 = [m.team2_player1_id, m.team2_player2_id];
+        for (const p1 of team1) {
+          for (const p2 of team2) {
+            const key = makePairKey(p1, p2);
+            opponentCounts[key] = (opponentCounts[key] || 0) + 1;
+          }
+        }
+      }
+      let repeatOpponentCount = 0;
+      for (const count of Object.values(opponentCounts)) {
+        if (count > 1) repeatOpponentCount += count - 1;
+      }
+
+      // Compute fairness score
+      const diag = result.diagnostics;
+      let fairnessScore = 100;
+      if (diag.max_matches_per_player - diag.min_matches_per_player > 1) fairnessScore -= 10;
+      if (diag.max_sitout_streak > 2) fairnessScore -= 10;
+      fairnessScore -= diag.repeat_partner_count * 2;
+      fairnessScore -= repeatOpponentCount * 1;
+      fairnessScore = Math.max(0, fairnessScore);
+
+      // Get session_id from court
+      const { data: courtRow } = await supabase
+        .from("courts")
+        .select("session_id")
+        .eq("id", courtId)
+        .maybeSingle();
+
+      // Delete old audit for this court
+      await supabase.from("rotation_audit").delete().eq("court_id", courtId);
+
+      await supabase.from("rotation_audit").insert({
+        session_id: courtRow?.session_id || null,
+        court_id: courtId,
+        total_players: n,
+        matches_per_player_min: diag.min_matches_per_player,
+        matches_per_player_max: diag.max_matches_per_player,
+        max_consecutive_sitouts: diag.max_sitout_streak,
+        repeat_partner_count: diag.repeat_partner_count,
+        repeat_opponent_count: repeatOpponentCount,
+        fairness_score: fairnessScore,
+      });
+
+      console.log("Rotation audit stored:", { fairnessScore, repeatOpponentCount });
+    } catch (auditErr) {
+      console.error("Audit storage warning (non-blocking):", auditErr);
+    }
+
     return new Response(
       JSON.stringify(result),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

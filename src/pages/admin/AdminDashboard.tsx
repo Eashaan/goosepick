@@ -190,6 +190,25 @@ const AdminDashboard = () => {
     enabled: linkedCourtIds.length > 0,
   });
 
+  // 5. Fetch rotation audit fairness scores per court
+  const { data: fairnessScores = new Map<number, number>() } = useQuery({
+    queryKey: ["rotation_audit_scores", linkedCourtIds.join(",")],
+    queryFn: async () => {
+      if (linkedCourtIds.length === 0) return new Map<number, number>();
+      const { data, error } = await supabase
+        .from("rotation_audit" as any)
+        .select("court_id, fairness_score")
+        .in("court_id", linkedCourtIds);
+      if (error) return new Map<number, number>();
+      const scores = new Map<number, number>();
+      (data || []).forEach((r: any) => {
+        scores.set(r.court_id, Number(r.fairness_score));
+      });
+      return scores;
+    },
+    enabled: linkedCourtIds.length > 0,
+  });
+
   if (isLoading || configLoading) {
     return (
       <PageLayout>
@@ -342,6 +361,7 @@ const AdminDashboard = () => {
                 {/* 1. Ungrouped courts (ascending) */}
                 {ungroupedUnits.map((unit) => {
                   const status = getUnitStatus(unit);
+                  const score = unit.court_id ? fairnessScores.get(unit.court_id) ?? null : null;
                   return (
                     <CourtStatusCard
                       key={`court-${unit.id}`}
@@ -350,6 +370,7 @@ const AdminDashboard = () => {
                       onClick={!unit.court_id ? () => handleCourtClick(unit) : undefined}
                       isLoading={creatingCourtNum === unit.court_number}
                       status={status}
+                      fairnessScore={score}
                     />
                   );
                 })}
