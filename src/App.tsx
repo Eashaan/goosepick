@@ -12,6 +12,7 @@ import AdminCourt from "./pages/admin/AdminCourt";
 import AdminGroup from "./pages/admin/AdminGroup";
 import PublicCourtSelector from "./pages/public/PublicCourtSelector";
 import PublicCourt from "./pages/public/PublicCourt";
+import PublicGroup from "./pages/public/PublicGroup";
 
 const queryClient = new QueryClient();
 
@@ -30,6 +31,7 @@ const App = () => (
             <Route path="/admin/group/:groupId" element={<AdminGroup />} />
             <Route path="/public" element={<PublicCourtSelector />} />
             <Route path="/public/court/:courtId" element={<PublicCourt />} />
+            <Route path="/public/group/:groupId" element={<PublicGroup />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
