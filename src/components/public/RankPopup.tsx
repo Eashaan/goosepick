@@ -46,19 +46,26 @@ const RankPopup = ({ rank, playerName, onClose }: RankPopupProps) => {
         return {
           emoji: "🥈",
           placement: "You finished #2 on the leaderboard.",
-          microNudge: "Brilliant effort.",
+          microNudge: "Brilliant performance.",
         };
       case 3:
         return {
           emoji: "🥉",
           placement: "You finished #3 on the leaderboard.",
-          microNudge: "Well earned.",
+          microNudge: "Strong showing.",
+        };
+      case 4:
+      case 5:
+        return {
+          emoji: null,
+          placement: `You finished #${rank} on the leaderboard.`,
+          microNudge: "Great effort.",
         };
       default:
         return {
           emoji: null,
           placement: `You finished #${rank} on the leaderboard.`,
-          microNudge: "Great effort.",
+          microNudge: "Well played.",
         };
     }
   };
