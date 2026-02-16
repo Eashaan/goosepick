@@ -1,0 +1,243 @@
+import { useEffect, useMemo } from "react";
+import { useParams, Link, useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ChevronLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import PageLayout from "@/components/layout/PageLayout";
+import GlobalHeader from "@/components/layout/GlobalHeader";
+import GroupCourtPulse from "@/components/public/GroupCourtPulse";
+import PersonalRoster from "@/components/public/PersonalRoster";
+import Leaderboard from "@/components/public/Leaderboard";
+import { useEventContext, GOOSEPICK_THURSDAYS_ID } from "@/hooks/useEventContext";
+import { format } from "date-fns";
+
+const PublicGroup = () => {
+  const { groupId } = useParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { isContextValid, isLoading: contextLoading } = useEventContext();
+
+  // Redirect if no context
+  useEffect(() => {
+    if (!contextLoading && !isContextValid) {
+      navigate("/", { replace: true });
+    }
+  }, [contextLoading, isContextValid, navigate]);
+
+  // Fetch group details
+  const { data: group, isLoading: groupLoading } = useQuery({
+    queryKey: ["court_group", groupId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("court_groups")
+        .select("*")
+        .eq("id", groupId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!groupId && isContextValid,
+  });
+
+  // Fetch players scoped to group
+  const { data: players = [] } = useQuery({
+    queryKey: ["group_players", groupId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("players")
+        .select("*")
+        .eq("group_id", groupId!)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!groupId && isContextValid,
+  });
+
+  // Fetch matches scoped to group
+  const { data: matches = [] } = useQuery({
+    queryKey: ["group_matches", groupId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("matches")
+        .select("*")
+        .eq("group_id", groupId!)
+        .order("global_match_index", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!groupId && isContextValid,
+  });
+
+  // Fetch group court states
+  const { data: courtStates = [] } = useQuery({
+    queryKey: ["group_court_state", groupId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("group_court_state")
+        .select("*")
+        .eq("group_id", groupId!)
+        .order("court_number", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!groupId && isContextValid,
+  });
+
+  // Build a synthetic court_id and courtState for PersonalRoster compatibility
+  // PersonalRoster expects a courtId (number) and courtState. We use court_ids[0] as sentinel.
+  const syntheticCourtId = group?.court_ids?.[0] ?? 0;
+
+  // Build a synthetic courtState from group court states for PersonalRoster nudge logic
+  const syntheticCourtState = useMemo(() => {
+    if (courtStates.length === 0) return undefined;
+    // Find first live court
+    const liveState = courtStates.find(cs => cs.is_live);
+    const currentGlobalIndex = liveState?.current_match_global_index ?? 0;
+    const anyLive = courtStates.some(cs => cs.is_live);
+    const allMatchesDone = matches.length > 0 && matches.every(m => m.status === "completed");
+
+    return {
+      court_id: syntheticCourtId,
+      current_match_index: currentGlobalIndex,
+      phase: allMatchesDone ? "completed" as const : anyLive ? "in_progress" as const : "idle" as const,
+      session_id: group?.session_id ?? null,
+      updated_at: new Date().toISOString(),
+    };
+  }, [courtStates, matches, syntheticCourtId, group?.session_id]);
+
+  // Realtime subscriptions
+  useEffect(() => {
+    if (!groupId || !isContextValid) return;
+
+    const channel = supabase
+      .channel(`group-${groupId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "group_court_state", filter: `group_id=eq.${groupId}` },
+        () => queryClient.invalidateQueries({ queryKey: ["group_court_state", groupId] })
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "matches", filter: `group_id=eq.${groupId}` },
+        () => queryClient.invalidateQueries({ queryKey: ["group_matches", groupId] })
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "players", filter: `group_id=eq.${groupId}` },
+        () => queryClient.invalidateQueries({ queryKey: ["group_players", groupId] })
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [groupId, queryClient, isContextValid]);
+
+  // Derive display name from court numbers
+  const groupLabel = useMemo(() => {
+    if (!group?.court_ids || group.court_ids.length === 0) return "Group";
+    return `Courts ${group.court_ids.join(" & ")}`;
+  }, [group?.court_ids]);
+
+  if (contextLoading || groupLoading) {
+    return (
+      <PageLayout showFooter={false}>
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="text-muted-foreground">Loading...</div>
+        </div>
+      </PageLayout>
+    );
+  }
+
+  if (!group) {
+    return (
+      <PageLayout showFooter={false}>
+        <GlobalHeader />
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="text-muted-foreground">Group not found.</div>
+        </div>
+      </PageLayout>
+    );
+  }
+
+  return (
+    <PageLayout showFooter={false}>
+      <div className="min-h-screen flex flex-col">
+        <GlobalHeader />
+
+        {/* Group Title */}
+        <div className="px-4 py-3 flex items-center gap-3 border-b border-border">
+          <Button asChild variant="ghost" size="icon" className="shrink-0">
+            <Link to="/public">
+              <ChevronLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <h1 className="text-lg font-semibold">{groupLabel}</h1>
+        </div>
+
+        {/* Multi-Court Pulse */}
+        <GroupCourtPulse
+          courtStates={courtStates}
+          matches={matches}
+          players={players}
+          totalMatches={group.total_matches || matches.length}
+          courtIds={group.court_ids}
+        />
+
+        {/* Tabs */}
+        <Tabs defaultValue="personal" className="flex-1 flex flex-col">
+          <TabsList className="sticky top-0 z-10 mx-4 bg-secondary rounded-xl h-12">
+            <TabsTrigger value="personal" className="flex-1 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              Personal Roster
+            </TabsTrigger>
+            <TabsTrigger value="leaderboard" className="flex-1 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              Leaderboard
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="personal" className="flex-1 mt-0 p-4">
+            <PersonalRoster
+              courtId={syntheticCourtId}
+              players={players}
+              matches={matches}
+              courtState={syntheticCourtState}
+            />
+          </TabsContent>
+
+          <TabsContent value="leaderboard" className="flex-1 mt-0 p-4">
+            <Leaderboard
+              matches={matches}
+              players={players}
+            />
+          </TabsContent>
+        </Tabs>
+
+        {/* Footer */}
+        <div className="py-4 text-center border-t border-border">
+          <p className="text-xs text-muted-foreground">
+            <GroupFooterText />
+          </p>
+        </div>
+      </div>
+    </PageLayout>
+  );
+};
+
+const GroupFooterText = () => {
+  const { selectedEvent, selectedCity, selectedLocation } = useEventContext();
+  const today = format(new Date(), "MMMM d, yyyy");
+  const cityName = selectedCity?.name || "Mumbai";
+  const eventName = selectedEvent?.name || "Goosepick Social";
+  const isThursdays = selectedEvent?.id === GOOSEPICK_THURSDAYS_ID;
+
+  const footerText = isThursdays && selectedLocation
+    ? `${eventName} ${cityName} – ${today} – ${selectedLocation.name}`
+    : `${eventName} ${cityName} – ${today}`;
+
+  return <>{footerText}</>;
+};
+
+export default PublicGroup;

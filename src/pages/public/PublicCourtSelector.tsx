@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import PageLayout from "@/components/layout/PageLayout";
 import GlobalHeader from "@/components/layout/GlobalHeader";
 import { useEventContext } from "@/hooks/useEventContext";
@@ -17,8 +19,22 @@ const PublicCourtSelector = () => {
     clearSelection,
   } = useEventContext();
 
-  const { renderItems, configLoading } = useScopedCourts();
+  const { renderItems, configLoading, sessionConfig } = useScopedCourts();
   const { isEnded, activeSession, sessionLoading } = useActiveSession();
+
+  // Fetch court_groups for the current session config to resolve group IDs
+  const { data: courtGroups = [] } = useQuery({
+    queryKey: ["court_groups_public", sessionConfig?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("court_groups")
+        .select("id, court_ids")
+        .eq("session_config_id", sessionConfig!.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!sessionConfig?.id,
+  });
 
   useEffect(() => {
     if (!isContextValid) {
@@ -68,18 +84,44 @@ const PublicCourtSelector = () => {
 
           {activeSession && (activeSession.status === 'live' || activeSession.status === 'ended') && (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-              {renderItems.map((item) =>
-                item.type === "group" ? (
-                  <Button
-                    key={item.key}
-                    variant="secondary"
-                    className="h-24 text-base font-semibold rounded-2xl opacity-70 cursor-default flex flex-col items-center justify-center gap-1"
-                    disabled
-                  >
-                    <span>{item.label}</span>
-                    <span className="text-xs font-normal text-muted-foreground">Coming soon</span>
-                  </Button>
-                ) : (
+              {renderItems.map((item) => {
+                if (item.type === "group") {
+                  // Find the court_group record matching this unit's court numbers
+                  const matchingGroup = courtGroups.find(cg => {
+                    const cgNums = [...(cg.court_ids || [])].sort((a, b) => a - b);
+                    const itemNums = [...(item.courtNumbers || [])].sort((a, b) => a - b);
+                    return JSON.stringify(cgNums) === JSON.stringify(itemNums);
+                  });
+
+                  if (matchingGroup) {
+                    return (
+                      <Button
+                        key={item.key}
+                        asChild
+                        variant="secondary"
+                        className="h-24 text-base font-semibold rounded-2xl hover:bg-primary hover:text-primary-foreground transition-all duration-200 flex flex-col items-center justify-center gap-1"
+                      >
+                        <Link to={`/public/group/${matchingGroup.id}`}>
+                          <span>{item.label}</span>
+                        </Link>
+                      </Button>
+                    );
+                  }
+
+                  return (
+                    <Button
+                      key={item.key}
+                      variant="secondary"
+                      className="h-24 text-base font-semibold rounded-2xl opacity-70 cursor-default flex flex-col items-center justify-center gap-1"
+                      disabled
+                    >
+                      <span>{item.label}</span>
+                      <span className="text-xs font-normal text-muted-foreground">Not ready</span>
+                    </Button>
+                  );
+                }
+
+                return (
                   <Button
                     key={item.key}
                     asChild
@@ -90,8 +132,8 @@ const PublicCourtSelector = () => {
                       {item.label}
                     </Link>
                   </Button>
-                )
-              )}
+                );
+              })}
               {renderItems.length === 0 && !configLoading && (
                 <div className="col-span-full text-center py-12 text-muted-foreground">
                   No courts found for this event/location.
