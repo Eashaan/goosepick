@@ -42,6 +42,7 @@ export type Database = {
           format_type: Database["public"]["Enums"]["format_type"]
           id: string
           session_config_id: string
+          session_id: string | null
         }
         Insert: {
           court_ids: number[]
@@ -49,6 +50,7 @@ export type Database = {
           format_type?: Database["public"]["Enums"]["format_type"]
           id?: string
           session_config_id: string
+          session_id?: string | null
         }
         Update: {
           court_ids?: number[]
@@ -56,6 +58,7 @@ export type Database = {
           format_type?: Database["public"]["Enums"]["format_type"]
           id?: string
           session_config_id?: string
+          session_id?: string | null
         }
         Relationships: [
           {
@@ -65,6 +68,13 @@ export type Database = {
             referencedRelation: "session_configs"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "court_groups_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
         ]
       }
       court_state: {
@@ -72,18 +82,21 @@ export type Database = {
           court_id: number
           current_match_index: number
           phase: Database["public"]["Enums"]["court_phase"]
+          session_id: string | null
           updated_at: string
         }
         Insert: {
           court_id: number
           current_match_index?: number
           phase?: Database["public"]["Enums"]["court_phase"]
+          session_id?: string | null
           updated_at?: string
         }
         Update: {
           court_id?: number
           current_match_index?: number
           phase?: Database["public"]["Enums"]["court_phase"]
+          session_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -92,6 +105,13 @@ export type Database = {
             columns: ["court_id"]
             isOneToOne: true
             referencedRelation: "courts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "court_state_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
             referencedColumns: ["id"]
           },
         ]
@@ -258,6 +278,7 @@ export type Database = {
           note: string | null
           player_id: string
           rating: Database["public"]["Enums"]["feedback_rating"]
+          session_id: string | null
         }
         Insert: {
           court_id: number
@@ -266,6 +287,7 @@ export type Database = {
           note?: string | null
           player_id: string
           rating: Database["public"]["Enums"]["feedback_rating"]
+          session_id?: string | null
         }
         Update: {
           court_id?: number
@@ -274,6 +296,7 @@ export type Database = {
           note?: string | null
           player_id?: string
           rating?: Database["public"]["Enums"]["feedback_rating"]
+          session_id?: string | null
         }
         Relationships: [
           {
@@ -288,6 +311,13 @@ export type Database = {
             columns: ["player_id"]
             isOneToOne: false
             referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feedback_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
             referencedColumns: ["id"]
           },
         ]
@@ -341,6 +371,7 @@ export type Database = {
           id: string
           match_id: string
           replaced_player_id: string
+          session_id: string | null
           substitute_player_id: string
         }
         Insert: {
@@ -349,6 +380,7 @@ export type Database = {
           id?: string
           match_id: string
           replaced_player_id: string
+          session_id?: string | null
           substitute_player_id: string
         }
         Update: {
@@ -357,6 +389,7 @@ export type Database = {
           id?: string
           match_id?: string
           replaced_player_id?: string
+          session_id?: string | null
           substitute_player_id?: string
         }
         Relationships: [
@@ -382,6 +415,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "match_substitutions_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "match_substitutions_substitute_player_id_fkey"
             columns: ["substitute_player_id"]
             isOneToOne: false
@@ -398,6 +438,7 @@ export type Database = {
           id: string
           match_index: number
           override_played: boolean
+          session_id: string | null
           started_at: string | null
           status: string
           team1_player1_id: string | null
@@ -414,6 +455,7 @@ export type Database = {
           id?: string
           match_index: number
           override_played?: boolean
+          session_id?: string | null
           started_at?: string | null
           status?: string
           team1_player1_id?: string | null
@@ -430,6 +472,7 @@ export type Database = {
           id?: string
           match_index?: number
           override_played?: boolean
+          session_id?: string | null
           started_at?: string | null
           status?: string
           team1_player1_id?: string | null
@@ -445,6 +488,13 @@ export type Database = {
             columns: ["court_id"]
             isOneToOne: false
             referencedRelation: "courts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
             referencedColumns: ["id"]
           },
           {
@@ -485,6 +535,7 @@ export type Database = {
           id: string
           is_guest: boolean
           name: string
+          session_id: string | null
         }
         Insert: {
           added_by_admin?: boolean
@@ -493,6 +544,7 @@ export type Database = {
           id?: string
           is_guest?: boolean
           name: string
+          session_id?: string | null
         }
         Update: {
           added_by_admin?: boolean
@@ -501,6 +553,7 @@ export type Database = {
           id?: string
           is_guest?: boolean
           name?: string
+          session_id?: string | null
         }
         Relationships: [
           {
@@ -508,6 +561,13 @@ export type Database = {
             columns: ["court_id"]
             isOneToOne: false
             referencedRelation: "courts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "players_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
             referencedColumns: ["id"]
           },
         ]
@@ -578,6 +638,7 @@ export type Database = {
           event_type: Database["public"]["Enums"]["scope_event_type"]
           id: string
           location_id: string | null
+          session_id: string | null
           setup_completed: boolean
           updated_at: string | null
         }
@@ -589,6 +650,7 @@ export type Database = {
           event_type: Database["public"]["Enums"]["scope_event_type"]
           id?: string
           location_id?: string | null
+          session_id?: string | null
           setup_completed?: boolean
           updated_at?: string | null
         }
@@ -600,6 +662,7 @@ export type Database = {
           event_type?: Database["public"]["Enums"]["scope_event_type"]
           id?: string
           location_id?: string | null
+          session_id?: string | null
           setup_completed?: boolean
           updated_at?: string | null
         }
@@ -625,6 +688,13 @@ export type Database = {
             referencedRelation: "locations"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "session_configs_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
         ]
       }
       sessions: {
@@ -632,28 +702,40 @@ export type Database = {
           city_id: string
           created_at: string
           date: string
+          ended_at: string | null
           event_type: Database["public"]["Enums"]["scope_event_type"]
           id: string
           is_active: boolean
           location_id: string | null
+          session_label: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["session_status"]
         }
         Insert: {
           city_id: string
           created_at?: string
           date?: string
+          ended_at?: string | null
           event_type: Database["public"]["Enums"]["scope_event_type"]
           id?: string
           is_active?: boolean
           location_id?: string | null
+          session_label?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["session_status"]
         }
         Update: {
           city_id?: string
           created_at?: string
           date?: string
+          ended_at?: string | null
           event_type?: Database["public"]["Enums"]["scope_event_type"]
           id?: string
           is_active?: boolean
           location_id?: string | null
+          session_label?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["session_status"]
         }
         Relationships: [
           {
@@ -730,6 +812,7 @@ export type Database = {
         | "format_4"
         | "format_5"
       scope_event_type: "social" | "thursdays"
+      session_status: "draft" | "live" | "ended"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -869,6 +952,7 @@ export const Constants = {
         "format_5",
       ],
       scope_event_type: ["social", "thursdays"],
+      session_status: ["draft", "live", "ended"],
     },
   },
 } as const

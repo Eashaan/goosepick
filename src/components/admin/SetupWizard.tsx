@@ -340,26 +340,27 @@ const SetupWizard = ({
       }
     },
     onSuccess: async () => {
-      // Create or fetch session for today's date + scope
+      // Create or fetch draft session for today's date + scope
       try {
         const today = new Date().toISOString().split('T')[0];
-        // Try to find existing session for today
+        // Try to find existing non-ended session for today
         let sessionQuery = supabase
           .from("sessions" as any)
-          .select("id")
+          .select("id, status")
           .eq("city_id", cityId)
           .eq("event_type", scopeEventType)
-          .eq("date", today);
+          .eq("date", today)
+          .in("status", ["draft", "live"]);
         if (locationId) {
           sessionQuery = sessionQuery.eq("location_id", locationId);
         } else {
           sessionQuery = sessionQuery.is("location_id", null);
         }
-        const { data: existingSession } = await (sessionQuery as any).maybeSingle();
+        const { data: existingSessions } = await (sessionQuery as any);
 
         let sessionId: string;
-        if (existingSession) {
-          sessionId = (existingSession as any).id;
+        if (existingSessions && existingSessions.length > 0) {
+          sessionId = existingSessions[0].id;
         } else {
           const { data: newSession, error: sessionError } = await supabase
             .from("sessions" as any)
@@ -368,7 +369,8 @@ const SetupWizard = ({
               event_type: scopeEventType,
               location_id: locationId,
               date: today,
-              is_active: true,
+              is_active: false,
+              status: "draft",
             } as any)
             .select("id")
             .single();
@@ -400,13 +402,13 @@ const SetupWizard = ({
         localStorage.setItem("gp_session_id", sessionId);
       } catch (err) {
         console.error("Session creation warning:", err);
-        // Non-blocking — setup still succeeds
       }
 
       queryClient.invalidateQueries({ queryKey: ["session_config"] });
       queryClient.invalidateQueries({ queryKey: ["courts"] });
       queryClient.invalidateQueries({ queryKey: ["court_groups"] });
       queryClient.invalidateQueries({ queryKey: ["court_units"] });
+      queryClient.invalidateQueries({ queryKey: ["active_session"] });
       toast.success("Setup completed!");
       onComplete();
     },
