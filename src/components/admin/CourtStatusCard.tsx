@@ -12,6 +12,7 @@ interface CourtStatusCardProps {
   disabledLabel?: string;
   onClick?: () => void;
   isLoading?: boolean;
+  fairnessScore?: number | null;
 }
 
 const statusStyles: Record<CourtStatus, { border: string; dot: string; glow?: string }> = {
@@ -34,8 +35,17 @@ const statusStyles: Record<CourtStatus, { border: string; dot: string; glow?: st
   },
 };
 
-const CourtStatusCard = ({ label, to, status, disabled, disabledLabel, onClick, isLoading }: CourtStatusCardProps) => {
+const CourtStatusCard = ({ label, to, status, disabled, disabledLabel, onClick, isLoading, fairnessScore }: CourtStatusCardProps) => {
   const style = statusStyles[status];
+
+  const fairnessIndicator = fairnessScore != null && status !== "setup" && (
+    <span
+      className="absolute top-2.5 left-2.5 text-xs"
+      title={`Fairness: ${fairnessScore}`}
+    >
+      {fairnessScore >= 85 ? "🟢" : "🟠"}
+    </span>
+  );
 
   const dot = status !== "setup" && (
     <span
@@ -63,6 +73,7 @@ const CourtStatusCard = ({ label, to, status, disabled, disabledLabel, onClick, 
           <span className="text-xs font-normal text-muted-foreground">{disabledLabel}</span>
         )}
         {dot}
+        {fairnessIndicator}
       </Button>
     );
   }
@@ -81,6 +92,7 @@ const CourtStatusCard = ({ label, to, status, disabled, disabledLabel, onClick, 
       >
         {label}
         {dot}
+        {fairnessIndicator}
       </Button>
     );
   }
@@ -97,6 +109,7 @@ const CourtStatusCard = ({ label, to, status, disabled, disabledLabel, onClick, 
       <Link to={to || "#"}>
         {label}
         {dot}
+        {fairnessIndicator}
       </Link>
     </Button>
   );

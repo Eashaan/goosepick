@@ -339,7 +339,70 @@ const SetupWizard = ({
         } as any);
       }
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      // Create or fetch session for today's date + scope
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        // Try to find existing session for today
+        let sessionQuery = supabase
+          .from("sessions" as any)
+          .select("id")
+          .eq("city_id", cityId)
+          .eq("event_type", scopeEventType)
+          .eq("date", today);
+        if (locationId) {
+          sessionQuery = sessionQuery.eq("location_id", locationId);
+        } else {
+          sessionQuery = sessionQuery.is("location_id", null);
+        }
+        const { data: existingSession } = await (sessionQuery as any).maybeSingle();
+
+        let sessionId: string;
+        if (existingSession) {
+          sessionId = (existingSession as any).id;
+        } else {
+          const { data: newSession, error: sessionError } = await supabase
+            .from("sessions" as any)
+            .insert({
+              city_id: cityId,
+              event_type: scopeEventType,
+              location_id: locationId,
+              date: today,
+              is_active: true,
+            } as any)
+            .select("id")
+            .single();
+          if (sessionError) throw sessionError;
+          sessionId = (newSession as any).id;
+        }
+
+        // Link all courts for this event/location to this session
+        let courtsToLink = supabase
+          .from("courts")
+          .select("id")
+          .eq("event_id", eventId);
+        if (locationId) {
+          courtsToLink = courtsToLink.eq("location_id", locationId);
+        } else {
+          courtsToLink = courtsToLink.is("location_id", null);
+        }
+        const { data: courtsData } = await courtsToLink;
+        if (courtsData) {
+          for (const court of courtsData) {
+            await supabase
+              .from("courts")
+              .update({ session_id: sessionId } as any)
+              .eq("id", court.id);
+          }
+        }
+
+        // Store session_id in localStorage
+        localStorage.setItem("gp_session_id", sessionId);
+      } catch (err) {
+        console.error("Session creation warning:", err);
+        // Non-blocking — setup still succeeds
+      }
+
       queryClient.invalidateQueries({ queryKey: ["session_config"] });
       queryClient.invalidateQueries({ queryKey: ["courts"] });
       queryClient.invalidateQueries({ queryKey: ["court_groups"] });

@@ -344,42 +344,40 @@ const AdminCourt = () => {
   // The ACTIVE match being played - derived from DB status
   const activeMatch = getInProgressMatch();
 
-  // Start match mutation
+  // Start match mutation — atomic RPC
   const startMatch = useMutation({
     mutationFn: async () => {
       const matchToStart = getMatchToStart();
       if (!matchToStart) throw new Error("No match to start");
 
-      // Update match status
-      const { error: matchError } = await supabase
-        .from("matches")
-        .update({ 
-          status: "in_progress", 
-          started_at: new Date().toISOString() 
-        })
-        .eq("id", matchToStart.id);
-      if (matchError) throw matchError;
-
-      // Update court state
-      const { error: stateError } = await supabase
-        .from("court_state")
-        .update({ 
-          phase: "in_progress", 
-          current_match_index: matchToStart.match_index,
-          updated_at: new Date().toISOString() 
-        })
-        .eq("court_id", courtNumber);
-      if (stateError) throw stateError;
+      const { data, error } = await supabase.rpc("start_match_atomic" as any, {
+        p_court_id: courtNumber,
+        p_match_id: matchToStart.id,
+        p_match_index: matchToStart.match_index,
+      });
+      if (error) throw error;
+      const result = data as any;
+      if (!result?.ok) {
+        throw new Error(result?.error || "Failed to start match");
+      }
+      return result;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["matches", courtNumber] });
       queryClient.invalidateQueries({ queryKey: ["court_state", courtNumber] });
       setOverrideMatchId(null);
-      toast.success("Match started");
+      if (data?.status === "already_started") {
+        toast.info("Match already in progress");
+      } else {
+        toast.success("Match started");
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to start match");
     },
   });
 
-  // End match mutation
+  // End match mutation — atomic RPC
   const endMatch = useMutation({
     mutationFn: async ({ team1Score, team2Score }: { team1Score: number; team2Score: number }) => {
       const currentMatch = matches.find(m => m.match_index === courtState?.current_match_index);
@@ -387,40 +385,31 @@ const AdminCourt = () => {
 
       const wasOverride = overrideMatchId !== null;
 
-      // Update match scores and status
-      const { error: matchError } = await supabase
-        .from("matches")
-        .update({ 
-          team1_score: team1Score, 
-          team2_score: team2Score,
-          status: "completed",
-          completed_at: new Date().toISOString(),
-          override_played: wasOverride
-        })
-        .eq("id", currentMatch.id);
-      if (matchError) throw matchError;
-
-      // Find next uncompleted match
-      const nextMatch = matches.find(m => 
-        m.status !== "completed" && m.id !== currentMatch.id
-      );
-      
-      const isCompleted = !nextMatch;
-
-      const { error: stateError } = await supabase
-        .from("court_state")
-        .update({
-          current_match_index: isCompleted ? courtState?.current_match_index : nextMatch?.match_index,
-          phase: isCompleted ? "completed" : "idle",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("court_id", courtNumber);
-      if (stateError) throw stateError;
+      const { data, error } = await supabase.rpc("end_match_atomic" as any, {
+        p_court_id: courtNumber,
+        p_match_id: currentMatch.id,
+        p_team1_score: team1Score,
+        p_team2_score: team2Score,
+        p_is_override: wasOverride,
+      });
+      if (error) throw error;
+      const result = data as any;
+      if (!result?.ok) {
+        throw new Error(result?.error || "Failed to end match");
+      }
+      return result;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["matches", courtNumber] });
       queryClient.invalidateQueries({ queryKey: ["court_state", courtNumber] });
-      toast.success("Match completed");
+      if (data?.status === "already_completed") {
+        toast.info("Match was already completed — scores updated");
+      } else {
+        toast.success("Match completed");
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to end match");
     },
   });
 

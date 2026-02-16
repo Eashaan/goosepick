@@ -173,6 +173,7 @@ export type Database = {
           id: number
           location_id: string | null
           name: string
+          session_id: string | null
         }
         Insert: {
           event_id?: string | null
@@ -180,6 +181,7 @@ export type Database = {
           id?: number
           location_id?: string | null
           name: string
+          session_id?: string | null
         }
         Update: {
           event_id?: string | null
@@ -187,6 +189,7 @@ export type Database = {
           id?: number
           location_id?: string | null
           name?: string
+          session_id?: string | null
         }
         Relationships: [
           {
@@ -201,6 +204,13 @@ export type Database = {
             columns: ["location_id"]
             isOneToOne: false
             referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "courts_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
             referencedColumns: ["id"]
           },
         ]
@@ -502,6 +512,63 @@ export type Database = {
           },
         ]
       }
+      rotation_audit: {
+        Row: {
+          court_id: number
+          created_at: string
+          fairness_score: number
+          id: string
+          matches_per_player_max: number
+          matches_per_player_min: number
+          max_consecutive_sitouts: number
+          repeat_opponent_count: number
+          repeat_partner_count: number
+          session_id: string | null
+          total_players: number
+        }
+        Insert: {
+          court_id: number
+          created_at?: string
+          fairness_score?: number
+          id?: string
+          matches_per_player_max: number
+          matches_per_player_min: number
+          max_consecutive_sitouts: number
+          repeat_opponent_count?: number
+          repeat_partner_count?: number
+          session_id?: string | null
+          total_players: number
+        }
+        Update: {
+          court_id?: number
+          created_at?: string
+          fairness_score?: number
+          id?: string
+          matches_per_player_max?: number
+          matches_per_player_min?: number
+          max_consecutive_sitouts?: number
+          repeat_opponent_count?: number
+          repeat_partner_count?: number
+          session_id?: string | null
+          total_players?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rotation_audit_court_id_fkey"
+            columns: ["court_id"]
+            isOneToOne: false
+            referencedRelation: "courts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rotation_audit_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       session_configs: {
         Row: {
           city_id: string
@@ -560,6 +627,51 @@ export type Database = {
           },
         ]
       }
+      sessions: {
+        Row: {
+          city_id: string
+          created_at: string
+          date: string
+          event_type: Database["public"]["Enums"]["scope_event_type"]
+          id: string
+          is_active: boolean
+          location_id: string | null
+        }
+        Insert: {
+          city_id: string
+          created_at?: string
+          date?: string
+          event_type: Database["public"]["Enums"]["scope_event_type"]
+          id?: string
+          is_active?: boolean
+          location_id?: string | null
+        }
+        Update: {
+          city_id?: string
+          created_at?: string
+          date?: string
+          event_type?: Database["public"]["Enums"]["scope_event_type"]
+          id?: string
+          is_active?: boolean
+          location_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sessions_city_id_fkey"
+            columns: ["city_id"]
+            isOneToOne: false
+            referencedRelation: "cities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sessions_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
@@ -583,6 +695,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      end_match_atomic: {
+        Args: {
+          p_court_id: number
+          p_is_override?: boolean
+          p_match_id: string
+          p_team1_score: number
+          p_team2_score: number
+        }
+        Returns: Json
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -591,6 +713,10 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      start_match_atomic: {
+        Args: { p_court_id: number; p_match_id: string; p_match_index: number }
+        Returns: Json
+      }
     }
     Enums: {
       app_role: "admin"
