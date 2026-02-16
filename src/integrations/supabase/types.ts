@@ -39,26 +39,41 @@ export type Database = {
         Row: {
           court_ids: number[]
           created_at: string
+          duration_hours: number | null
           format_type: Database["public"]["Enums"]["format_type"]
           id: string
+          is_locked: boolean
+          locked_at: string | null
+          matches_per_hour: number | null
           session_config_id: string
           session_id: string | null
+          total_matches: number | null
         }
         Insert: {
           court_ids: number[]
           created_at?: string
+          duration_hours?: number | null
           format_type?: Database["public"]["Enums"]["format_type"]
           id?: string
+          is_locked?: boolean
+          locked_at?: string | null
+          matches_per_hour?: number | null
           session_config_id: string
           session_id?: string | null
+          total_matches?: number | null
         }
         Update: {
           court_ids?: number[]
           created_at?: string
+          duration_hours?: number | null
           format_type?: Database["public"]["Enums"]["format_type"]
           id?: string
+          is_locked?: boolean
+          locked_at?: string | null
+          matches_per_hour?: number | null
           session_config_id?: string
           session_id?: string | null
+          total_matches?: number | null
         }
         Relationships: [
           {
@@ -322,6 +337,61 @@ export type Database = {
           },
         ]
       }
+      group_court_state: {
+        Row: {
+          court_number: number
+          current_match_global_index: number | null
+          current_match_id: string | null
+          group_id: string
+          id: string
+          is_live: boolean
+          session_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          court_number: number
+          current_match_global_index?: number | null
+          current_match_id?: string | null
+          group_id: string
+          id?: string
+          is_live?: boolean
+          session_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          court_number?: number
+          current_match_global_index?: number | null
+          current_match_id?: string | null
+          group_id?: string
+          id?: string
+          is_live?: boolean
+          session_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_court_state_current_match_id_fkey"
+            columns: ["current_match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_court_state_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "court_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_court_state_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       locations: {
         Row: {
           active: boolean
@@ -368,28 +438,40 @@ export type Database = {
         Row: {
           court_id: number
           created_at: string
+          global_match_index: number | null
+          group_id: string | null
           id: string
           match_id: string
+          reason: string | null
           replaced_player_id: string
           session_id: string | null
+          slot: string | null
           substitute_player_id: string
         }
         Insert: {
           court_id: number
           created_at?: string
+          global_match_index?: number | null
+          group_id?: string | null
           id?: string
           match_id: string
+          reason?: string | null
           replaced_player_id: string
           session_id?: string | null
+          slot?: string | null
           substitute_player_id: string
         }
         Update: {
           court_id?: number
           created_at?: string
+          global_match_index?: number | null
+          group_id?: string | null
           id?: string
           match_id?: string
+          reason?: string | null
           replaced_player_id?: string
           session_id?: string | null
+          slot?: string | null
           substitute_player_id?: string
         }
         Relationships: [
@@ -398,6 +480,13 @@ export type Database = {
             columns: ["court_id"]
             isOneToOne: false
             referencedRelation: "courts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "match_substitutions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "court_groups"
             referencedColumns: ["id"]
           },
           {
@@ -434,7 +523,10 @@ export type Database = {
         Row: {
           completed_at: string | null
           court_id: number
+          court_number: number | null
           created_at: string
+          global_match_index: number | null
+          group_id: string | null
           id: string
           match_index: number
           override_played: boolean
@@ -451,7 +543,10 @@ export type Database = {
         Insert: {
           completed_at?: string | null
           court_id: number
+          court_number?: number | null
           created_at?: string
+          global_match_index?: number | null
+          group_id?: string | null
           id?: string
           match_index: number
           override_played?: boolean
@@ -468,7 +563,10 @@ export type Database = {
         Update: {
           completed_at?: string | null
           court_id?: number
+          court_number?: number | null
           created_at?: string
+          global_match_index?: number | null
+          group_id?: string | null
           id?: string
           match_index?: number
           override_played?: boolean
@@ -488,6 +586,13 @@ export type Database = {
             columns: ["court_id"]
             isOneToOne: false
             referencedRelation: "courts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "court_groups"
             referencedColumns: ["id"]
           },
           {
@@ -530,8 +635,9 @@ export type Database = {
       players: {
         Row: {
           added_by_admin: boolean
-          court_id: number
+          court_id: number | null
           created_at: string
+          group_id: string | null
           id: string
           is_guest: boolean
           name: string
@@ -539,8 +645,9 @@ export type Database = {
         }
         Insert: {
           added_by_admin?: boolean
-          court_id: number
+          court_id?: number | null
           created_at?: string
+          group_id?: string | null
           id?: string
           is_guest?: boolean
           name: string
@@ -548,8 +655,9 @@ export type Database = {
         }
         Update: {
           added_by_admin?: boolean
-          court_id?: number
+          court_id?: number | null
           created_at?: string
+          group_id?: string | null
           id?: string
           is_guest?: boolean
           name?: string
@@ -561,6 +669,13 @@ export type Database = {
             columns: ["court_id"]
             isOneToOne: false
             referencedRelation: "courts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "players_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "court_groups"
             referencedColumns: ["id"]
           },
           {
