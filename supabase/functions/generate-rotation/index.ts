@@ -200,6 +200,14 @@ serve(async (req) => {
     // Delete existing matches for this court
     await supabase.from("matches").delete().eq("court_id", courtId);
 
+    // Get session_id from court for linking
+    const { data: courtForSession } = await supabase
+      .from("courts")
+      .select("session_id")
+      .eq("id", courtId)
+      .maybeSingle();
+    const sessionId = courtForSession?.session_id || null;
+
     // Insert new matches
     const matchInserts = result.matches.map((match, index) => ({
       court_id: courtId,
@@ -210,6 +218,7 @@ serve(async (req) => {
       team2_player2_id: match.team2_player2_id,
       status: "pending",
       override_played: false,
+      session_id: sessionId,
     }));
 
     const { error: insertError } = await supabase.from("matches").insert(matchInserts);

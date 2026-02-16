@@ -10,10 +10,12 @@ import GlobalHeader from "@/components/layout/GlobalHeader";
 import AdminContextBanner from "@/components/admin/AdminContextBanner";
 import SetupWizard from "@/components/admin/SetupWizard";
 import SessionSummaryStrip from "@/components/admin/SessionSummaryStrip";
+import SessionLifecycleControls from "@/components/admin/SessionLifecycleControls";
 import CourtStatusCard, { type CourtStatus } from "@/components/admin/CourtStatusCard";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useEventContext } from "@/hooks/useEventContext";
 import { useScopedCourts, type RenderItem } from "@/hooks/useScopedCourts";
+import { useActiveSession } from "@/hooks/useActiveSession";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -36,6 +38,8 @@ const AdminDashboard = () => {
     renderItems,
     warnings,
   } = useScopedCourts();
+
+  const { isLive, isEnded, activeSession } = useActiveSession();
 
   const [showEditSetup, setShowEditSetup] = useState(false);
   const [creatingCourtNum, setCreatingCourtNum] = useState<number | null>(null);
@@ -232,6 +236,13 @@ const AdminDashboard = () => {
               </Button>
             )}
           </div>
+
+          {/* Session Lifecycle Controls */}
+          {setupCompleted && !showWizard && (
+            <div className="mb-4">
+              <SessionLifecycleControls setupCompleted={setupCompleted} />
+            </div>
+          )}
 
           {/* Session Summary Strip */}
           {setupCompleted && !showWizard && (

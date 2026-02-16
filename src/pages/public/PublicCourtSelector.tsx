@@ -6,6 +6,7 @@ import PageLayout from "@/components/layout/PageLayout";
 import GlobalHeader from "@/components/layout/GlobalHeader";
 import { useEventContext } from "@/hooks/useEventContext";
 import { useScopedCourts } from "@/hooks/useScopedCourts";
+import { useActiveSession } from "@/hooks/useActiveSession";
 
 const PublicCourtSelector = () => {
   const navigate = useNavigate();
@@ -17,6 +18,7 @@ const PublicCourtSelector = () => {
   } = useEventContext();
 
   const { renderItems, configLoading } = useScopedCourts();
+  const { isEnded, activeSession, sessionLoading } = useActiveSession();
 
   useEffect(() => {
     if (!isContextValid) {
@@ -52,37 +54,51 @@ const PublicCourtSelector = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-            {renderItems.map((item) =>
-              item.type === "group" ? (
-                <Button
-                  key={item.key}
-                  variant="secondary"
-                  className="h-24 text-base font-semibold rounded-2xl opacity-70 cursor-default flex flex-col items-center justify-center gap-1"
-                  disabled
-                >
-                  <span>{item.label}</span>
-                  <span className="text-xs font-normal text-muted-foreground">Coming soon</span>
-                </Button>
-              ) : (
-                <Button
-                  key={item.key}
-                  asChild
-                  variant="secondary"
-                  className="h-24 text-xl font-semibold rounded-2xl hover:bg-primary hover:text-primary-foreground transition-all duration-200"
-                >
-                  <Link to={item.courtId ? `/public/court/${item.courtId}` : "#"}>
-                    {item.label}
-                  </Link>
-                </Button>
-              )
-            )}
-            {renderItems.length === 0 && !configLoading && (
-              <div className="col-span-full text-center py-12 text-muted-foreground">
-                No courts found for this event/location.
-              </div>
-            )}
-          </div>
+          {isEnded && (
+            <div className="mb-4 rounded-xl bg-secondary/50 p-4 text-center">
+              <p className="text-sm text-muted-foreground">This session has ended. Viewing in read-only mode.</p>
+            </div>
+          )}
+
+          {!activeSession && !sessionLoading && !configLoading && (
+            <div className="text-center py-12 text-muted-foreground">
+              No live session right now. Check back soon!
+            </div>
+          )}
+
+          {activeSession && (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+              {renderItems.map((item) =>
+                item.type === "group" ? (
+                  <Button
+                    key={item.key}
+                    variant="secondary"
+                    className="h-24 text-base font-semibold rounded-2xl opacity-70 cursor-default flex flex-col items-center justify-center gap-1"
+                    disabled
+                  >
+                    <span>{item.label}</span>
+                    <span className="text-xs font-normal text-muted-foreground">Coming soon</span>
+                  </Button>
+                ) : (
+                  <Button
+                    key={item.key}
+                    asChild
+                    variant="secondary"
+                    className="h-24 text-xl font-semibold rounded-2xl hover:bg-primary hover:text-primary-foreground transition-all duration-200"
+                  >
+                    <Link to={item.courtId ? `/public/court/${item.courtId}` : "#"}>
+                      {item.label}
+                    </Link>
+                  </Button>
+                )
+              )}
+              {renderItems.length === 0 && !configLoading && (
+                <div className="col-span-full text-center py-12 text-muted-foreground">
+                  No courts found for this event/location.
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="mt-12 text-center">
             <button
