@@ -60,13 +60,13 @@ const PublicCourtSelector = () => {
             </div>
           )}
 
-          {!activeSession && !sessionLoading && !configLoading && (
+          {!sessionLoading && !configLoading && (!activeSession || activeSession.status === 'draft') && (
             <div className="text-center py-12 text-muted-foreground">
               No live session right now. Check back soon!
             </div>
           )}
 
-          {activeSession && (
+          {activeSession && (activeSession.status === 'live' || activeSession.status === 'ended') && (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
               {renderItems.map((item) =>
                 item.type === "group" ? (
