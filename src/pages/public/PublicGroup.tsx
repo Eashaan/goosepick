@@ -11,6 +11,7 @@ import GroupCourtPulse from "@/components/public/GroupCourtPulse";
 import PersonalRoster from "@/components/public/PersonalRoster";
 import Leaderboard from "@/components/public/Leaderboard";
 import { useEventContext, GOOSEPICK_THURSDAYS_ID } from "@/hooks/useEventContext";
+import { useActiveSession } from "@/hooks/useActiveSession";
 import { format } from "date-fns";
 
 const PublicGroup = () => {
@@ -18,6 +19,7 @@ const PublicGroup = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { isContextValid, isLoading: contextLoading } = useEventContext();
+  const { activeSession, sessionLoading, sessionId } = useActiveSession();
 
   // Redirect if no context
   useEffect(() => {
@@ -26,64 +28,75 @@ const PublicGroup = () => {
     }
   }, [contextLoading, isContextValid, navigate]);
 
-  // Fetch group details
+  // Fetch group details — validate it belongs to active session
   const { data: group, isLoading: groupLoading } = useQuery({
-    queryKey: ["court_group", groupId],
+    queryKey: ["court_group", groupId, sessionId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("court_groups")
         .select("*")
-        .eq("id", groupId!)
-        .maybeSingle();
+        .eq("id", groupId!);
+      // Scope: group must belong to current session OR have no session
+      const { data, error } = await query.maybeSingle();
       if (error) throw error;
+      // Validate the group belongs to current session scope
+      if (data && sessionId && data.session_id && data.session_id !== sessionId) {
+        return null; // Wrong session
+      }
       return data;
     },
-    enabled: !!groupId && isContextValid,
+    enabled: !!groupId && isContextValid && !sessionLoading,
   });
 
-  // Fetch players scoped to group
+  // Fetch players scoped to group AND session
   const { data: players = [] } = useQuery({
-    queryKey: ["group_players", groupId],
+    queryKey: ["group_players", groupId, sessionId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("players")
         .select("*")
         .eq("group_id", groupId!)
         .order("created_at", { ascending: true });
+      if (sessionId) query = query.eq("session_id", sessionId);
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
-    enabled: !!groupId && isContextValid,
+    enabled: !!groupId && !!group && isContextValid,
   });
 
   // Fetch matches scoped to group
   const { data: matches = [] } = useQuery({
-    queryKey: ["group_matches", groupId],
+    queryKey: ["group_matches", groupId, sessionId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("matches")
         .select("*")
         .eq("group_id", groupId!)
         .order("global_match_index", { ascending: true });
+      if (sessionId) query = query.eq("session_id", sessionId);
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
-    enabled: !!groupId && isContextValid,
+    enabled: !!groupId && !!group && isContextValid,
   });
 
   // Fetch group court states
   const { data: courtStates = [] } = useQuery({
-    queryKey: ["group_court_state", groupId],
+    queryKey: ["group_court_state", groupId, sessionId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("group_court_state")
         .select("*")
         .eq("group_id", groupId!)
         .order("court_number", { ascending: true });
+      if (sessionId) query = query.eq("session_id", sessionId);
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
-    enabled: !!groupId && isContextValid,
+    enabled: !!groupId && !!group && isContextValid,
   });
 
   // Build a synthetic court_id and courtState for PersonalRoster compatibility
@@ -117,24 +130,24 @@ const PublicGroup = () => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "group_court_state", filter: `group_id=eq.${groupId}` },
-        () => queryClient.invalidateQueries({ queryKey: ["group_court_state", groupId] })
+        () => queryClient.invalidateQueries({ queryKey: ["group_court_state", groupId, sessionId] })
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "matches", filter: `group_id=eq.${groupId}` },
-        () => queryClient.invalidateQueries({ queryKey: ["group_matches", groupId] })
+        () => queryClient.invalidateQueries({ queryKey: ["group_matches", groupId, sessionId] })
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "players", filter: `group_id=eq.${groupId}` },
-        () => queryClient.invalidateQueries({ queryKey: ["group_players", groupId] })
+        () => queryClient.invalidateQueries({ queryKey: ["group_players", groupId, sessionId] })
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [groupId, queryClient, isContextValid]);
+  }, [groupId, queryClient, isContextValid, sessionId]);
 
   // Derive display name from court numbers
   const groupLabel = useMemo(() => {
@@ -142,7 +155,7 @@ const PublicGroup = () => {
     return `Courts ${group.court_ids.join(" & ")}`;
   }, [group?.court_ids]);
 
-  if (contextLoading || groupLoading) {
+  if (contextLoading || sessionLoading || groupLoading) {
     return (
       <PageLayout showFooter={false}>
         <div className="flex min-h-screen items-center justify-center">
@@ -156,8 +169,9 @@ const PublicGroup = () => {
     return (
       <PageLayout showFooter={false}>
         <GlobalHeader />
-        <div className="flex min-h-screen items-center justify-center">
-          <div className="text-muted-foreground">Group not found.</div>
+        <div className="flex min-h-screen items-center justify-center flex-col gap-4">
+          <div className="text-muted-foreground">This group is not available for the current session.</div>
+          <Button asChild variant="outline"><Link to="/public">Back to Court Selection</Link></Button>
         </div>
       </PageLayout>
     );

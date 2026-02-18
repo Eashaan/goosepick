@@ -123,6 +123,44 @@ const AdminDashboard = () => {
     enabled: linkedCourtIds.length > 0,
   });
 
+  // Fetch group-level status data (players + matches per group for this session)
+  const currentSessionId = activeSession?.id || null;
+  const { data: groupStatusMap = new Map<string, { playerCount: number; matchCount: number; hasLive: boolean }>() } = useQuery({
+    queryKey: ["group_status_dashboard", sessionConfig?.id, currentSessionId],
+    queryFn: async () => {
+      const { data: groups } = await supabase
+        .from("court_groups")
+        .select("id, court_ids, session_id, is_locked")
+        .eq("session_config_id", sessionConfig!.id);
+
+      const result = new Map<string, { playerCount: number; matchCount: number; hasLive: boolean }>();
+      if (!groups) return result;
+
+      for (const g of groups) {
+        // Only count groups for current session or no session
+        if (g.session_id && currentSessionId && g.session_id !== currentSessionId) continue;
+
+        let playerQuery = supabase.from("players").select("id", { count: "exact", head: true }).eq("group_id", g.id);
+        if (currentSessionId) playerQuery = playerQuery.eq("session_id", currentSessionId);
+        const { count: pCount } = await playerQuery;
+
+        let matchQuery = supabase.from("matches").select("id, status").eq("group_id", g.id);
+        if (currentSessionId) matchQuery = matchQuery.eq("session_id", currentSessionId);
+        const { data: matchData } = await matchQuery;
+
+        const matchCount = matchData?.length || 0;
+        const hasLive = (matchData || []).some(m => m.status === "in_progress");
+
+        // Map by court_ids array key for lookup
+        const key = [...(g.court_ids || [])].sort((a, b) => a - b).join(",");
+        result.set(key, { playerCount: pCount || 0, matchCount, hasLive });
+      }
+
+      return result;
+    },
+    enabled: !!sessionConfig?.id,
+  });
+
   if (isLoading || configLoading) {
     return (
       <PageLayout>
@@ -138,15 +176,12 @@ const AdminDashboard = () => {
   // ── Status helpers ──
   const getItemStatus = (item: RenderItem): CourtStatus => {
     if (item.type === "group") {
-      // Aggregate: find constituent court units
-      const courtNums = item.courtNumbers || [];
-      const constituentUnits = courtUnits.filter(
-        (u: any) => u.type === "court" && u.court_number != null && courtNums.includes(u.court_number!)
-      );
-      const statuses = constituentUnits.map((u: any) => getCourtUnitStatus(u));
-      if (statuses.includes("live")) return "live";
-      if (statuses.includes("completed")) return "completed";
-      if (statuses.includes("locked")) return "locked";
+      const key = [...(item.courtNumbers || [])].sort((a, b) => a - b).join(",");
+      const status = groupStatusMap.get(key);
+      if (!status) return "setup";
+      if (status.hasLive) return "live";
+      if (status.matchCount > 0) return "locked";
+      if (status.playerCount > 0) return "locked"; // "Players added" state
       return "setup";
     }
     // Find the court_unit for this item
@@ -209,12 +244,40 @@ const AdminDashboard = () => {
     if (!item.unitId || !item.courtNumbers) return;
     setCreatingGroupId(item.unitId);
     try {
-      // Check if a court_groups row already exists for these court numbers in this scope
-      const { data: existing } = await supabase
+      const currentSessionId = activeSession?.id || null;
+      const sortedNums = [...item.courtNumbers].sort((a, b) => a - b);
+
+      // Find existing group matching session_config + court_ids + current session
+      const { data: allGroups } = await supabase
         .from("court_groups")
-        .select("id")
-        .eq("session_config_id", sessionConfig?.id || "")
-        .maybeSingle();
+        .select("id, court_ids, session_id")
+        .eq("session_config_id", sessionConfig?.id || "");
+
+      // Match by court_ids array AND session_id
+      const existing = (allGroups || []).find(g => {
+        const gNums = [...(g.court_ids || [])].sort((a, b) => a - b);
+        const idsMatch = JSON.stringify(gNums) === JSON.stringify(sortedNums);
+        // Prefer group with matching session_id, then null session_id
+        return idsMatch && (g.session_id === currentSessionId || g.session_id === null);
+      });
+
+      // Also check for exact session match (higher priority)
+      const exactSessionMatch = (allGroups || []).find(g => {
+        const gNums = [...(g.court_ids || [])].sort((a, b) => a - b);
+        return JSON.stringify(gNums) === JSON.stringify(sortedNums) && g.session_id === currentSessionId;
+      });
+
+      if (exactSessionMatch) {
+        navigate(`/admin/group/${exactSessionMatch.id}`);
+        return;
+      }
+
+      if (existing && existing.session_id === null && currentSessionId) {
+        // Update existing group with current session_id
+        await supabase.from("court_groups").update({ session_id: currentSessionId } as any).eq("id", existing.id);
+        navigate(`/admin/group/${existing.id}`);
+        return;
+      }
 
       if (existing) {
         navigate(`/admin/group/${existing.id}`);
@@ -227,7 +290,7 @@ const AdminDashboard = () => {
         .insert({
           court_ids: item.courtNumbers,
           session_config_id: sessionConfig!.id,
-          session_id: activeSession?.id || null,
+          session_id: currentSessionId,
           format_type: "mystery_partner",
         } as any)
         .select("id")
