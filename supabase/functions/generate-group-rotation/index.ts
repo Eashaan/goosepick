@@ -36,6 +36,13 @@ interface Diagnostics {
   note?: string;
 }
 
+function errorResponse(stage: string, message: string, details?: string, code?: string) {
+  return new Response(
+    JSON.stringify({ ok: false, stage, message, details: details || "", code: code || "" }),
+    { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
+}
+
 // ── Helpers ────────────────────────────────────────────
 function seededRng(seed: number) {
   let s = seed;
@@ -64,20 +71,16 @@ function generateGroupRotation(
   totalMatches: number,
   seed: number,
 ): { ok: boolean; generation_mode: string; diagnostics: Diagnostics; matches: Match[] } {
-  const N = courtNumbers.length; // parallel courts
+  const N = courtNumbers.length;
   const P = players.length;
   const rng = seededRng(seed);
 
-  // We generate batches of N concurrent matches
   const totalBatches = Math.ceil(totalMatches / N);
-  const actualTotal = totalBatches * N > totalMatches ? totalMatches : totalBatches * N;
 
-  // Total slots = totalMatches * 4 players per match
   const totalSlots = totalMatches * 4;
   const targetBase = Math.floor(totalSlots / P);
   const remainder = totalSlots % P;
 
-  // Each player's target match count
   const playerTargets: Record<string, number> = {};
   const shuffled = seededShuffle(players, seed);
   shuffled.forEach((p, i) => {
@@ -85,7 +88,7 @@ function generateGroupRotation(
   });
 
   const matchesPlayed: Record<string, number> = {};
-  const consecutivePlays: Record<string, number> = {}; // batches played in a row
+  const consecutivePlays: Record<string, number> = {};
   const lastPlayedBatch: Record<string, number> = {};
   const partnerPairs: Record<string, number> = {};
   const opponentPairs: Record<string, number> = {};
@@ -103,7 +106,6 @@ function generateGroupRotation(
   for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
     const matchesInBatch = Math.min(N, totalMatches - batchIdx * N);
 
-    // Update consecutive play tracking
     players.forEach((p) => {
       if (lastPlayedBatch[p.id] === batchIdx - 1) {
         consecutivePlays[p.id]++;
@@ -112,22 +114,16 @@ function generateGroupRotation(
       }
     });
 
-    // Select 4 * matchesInBatch players for this batch (no duplicates within batch)
     const slotsNeeded = matchesInBatch * 4;
 
-    // Score players for selection
     const scored = players
       .filter((p) => matchesPlayed[p.id] < playerTargets[p.id])
       .map((p) => {
         let score = 0;
-        // Prioritize players who haven't played recently
         const batchesSinceLast = batchIdx - (lastPlayedBatch[p.id] ?? -999);
         score += batchesSinceLast * 100;
-        // Prioritize players below target
         score += (playerTargets[p.id] - matchesPlayed[p.id]) * 50;
-        // Deprioritize players with high consecutive plays (swap out oldest)
         if (consecutivePlays[p.id] >= 2) score -= 200;
-        // Small random jitter
         score += rng() * 10;
         return { player: p, score };
       })
@@ -136,20 +132,15 @@ function generateGroupRotation(
     const selected: Player[] = [];
     const selectedIds = new Set<string>();
 
-    // Must-play: players with sitout streak >= 2
     for (const p of players) {
       if (selectedIds.size >= slotsNeeded) break;
       const batchesSinceLast = batchIdx - (lastPlayedBatch[p.id] ?? -999);
-      if (
-        batchesSinceLast >= 3 &&
-        matchesPlayed[p.id] < playerTargets[p.id]
-      ) {
+      if (batchesSinceLast >= 3 && matchesPlayed[p.id] < playerTargets[p.id]) {
         selected.push(p);
         selectedIds.add(p.id);
       }
     }
 
-    // Fill from scored list
     for (const { player } of scored) {
       if (selectedIds.size >= slotsNeeded) break;
       if (!selectedIds.has(player.id)) {
@@ -158,7 +149,6 @@ function generateGroupRotation(
       }
     }
 
-    // Fallback: if still not enough, pull anyone
     if (selected.length < slotsNeeded) {
       for (const p of players) {
         if (selectedIds.size >= slotsNeeded) break;
@@ -169,12 +159,7 @@ function generateGroupRotation(
       }
     }
 
-    // Now assign selected players to matchesInBatch matches of 4
-    // Shuffle selected for randomness
-    const batchPlayers = seededShuffle(
-      selected.slice(0, slotsNeeded),
-      seed + batchIdx * 7919,
-    );
+    const batchPlayers = seededShuffle(selected.slice(0, slotsNeeded), seed + batchIdx * 7919);
 
     for (let m = 0; m < matchesInBatch; m++) {
       const globalIdx = batchIdx * N + m;
@@ -182,11 +167,7 @@ function generateGroupRotation(
 
       const fourPlayers = batchPlayers.slice(m * 4, m * 4 + 4);
       if (fourPlayers.length < 4) {
-        // Emergency: grab any 4
-        const emergency = seededShuffle([...players], seed + globalIdx).slice(
-          0,
-          4,
-        );
+        const emergency = seededShuffle([...players], seed + globalIdx).slice(0, 4);
         matches.push({
           team1_player1_id: emergency[0].id,
           team1_player2_id: emergency[1].id,
@@ -198,7 +179,6 @@ function generateGroupRotation(
         continue;
       }
 
-      // Find best team pairing among the 4 players
       const ids = fourPlayers.map((p) => p.id);
       const pairings: [number, number, number, number][] = [
         [0, 1, 2, 3],
@@ -213,10 +193,8 @@ function generateGroupRotation(
         const pk1 = pairKey(ids[a], ids[b]);
         const pk2 = pairKey(ids[c], ids[d]);
         let score = 0;
-        // Penalize repeated partners
         score += (partnerPairs[pk1] || 0) * 1000;
         score += (partnerPairs[pk2] || 0) * 1000;
-        // Penalize repeated opponents
         for (const t1 of [ids[a], ids[b]]) {
           for (const t2 of [ids[c], ids[d]]) {
             score += (opponentPairs[pairKey(t1, t2)] || 0) * 10;
@@ -239,26 +217,13 @@ function generateGroupRotation(
       if (bestMatch) {
         matches.push(bestMatch);
 
-        // Update tracking
-        const pk1 = pairKey(
-          bestMatch.team1_player1_id,
-          bestMatch.team1_player2_id,
-        );
-        const pk2 = pairKey(
-          bestMatch.team2_player1_id,
-          bestMatch.team2_player2_id,
-        );
+        const pk1 = pairKey(bestMatch.team1_player1_id, bestMatch.team1_player2_id);
+        const pk2 = pairKey(bestMatch.team2_player1_id, bestMatch.team2_player2_id);
         partnerPairs[pk1] = (partnerPairs[pk1] || 0) + 1;
         partnerPairs[pk2] = (partnerPairs[pk2] || 0) + 1;
 
-        for (const t1 of [
-          bestMatch.team1_player1_id,
-          bestMatch.team1_player2_id,
-        ]) {
-          for (const t2 of [
-            bestMatch.team2_player1_id,
-            bestMatch.team2_player2_id,
-          ]) {
+        for (const t1 of [bestMatch.team1_player1_id, bestMatch.team1_player2_id]) {
+          for (const t2 of [bestMatch.team2_player1_id, bestMatch.team2_player2_id]) {
             const ok = pairKey(t1, t2);
             opponentPairs[ok] = (opponentPairs[ok] || 0) + 1;
           }
@@ -277,7 +242,6 @@ function generateGroupRotation(
   const minMatches = Math.min(...counts);
   const maxMatches = Math.max(...counts);
 
-  // Max sitout streak (in batches)
   let maxSitout = 0;
   for (const p of players) {
     let streak = 0;
@@ -301,19 +265,16 @@ function generateGroupRotation(
     maxSitout = Math.max(maxSitout, maxStreak);
   }
 
-  // Partner repeats
   let repeatPartnerCount = 0;
   for (const c of Object.values(partnerPairs)) {
     if (c > 1) repeatPartnerCount += c - 1;
   }
 
-  // Opponent repeats
   let repeatOpponentCount = 0;
   for (const c of Object.values(opponentPairs)) {
     if (c > 1) repeatOpponentCount += c - 1;
   }
 
-  // Parallel collision check
   let batchViolations = 0;
   for (let b = 0; b < totalBatches; b++) {
     const batchMatches = matches.filter(
@@ -371,13 +332,7 @@ serve(async (req) => {
     // Auth
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ ok: false, error: "Unauthorized" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return errorResponse("auth", "Unauthorized");
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -393,13 +348,7 @@ serve(async (req) => {
       await userSupabase.auth.getClaims(token);
 
     if (claimsError || !claims?.claims?.sub) {
-      return new Response(
-        JSON.stringify({ ok: false, error: "Invalid authentication" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return errorResponse("auth", "Invalid authentication", claimsError?.message);
     }
 
     const userId = claims.claims.sub;
@@ -414,25 +363,13 @@ serve(async (req) => {
       .maybeSingle();
 
     if (!roleData) {
-      return new Response(
-        JSON.stringify({ ok: false, error: "Insufficient permissions" }),
-        {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return errorResponse("auth", "Insufficient permissions");
     }
 
     const { groupId, sessionId } = await req.json();
 
     if (!groupId) {
-      return new Response(
-        JSON.stringify({ ok: false, error: "Group ID is required" }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return errorResponse("validation", "Group ID is required");
     }
 
     // Fetch group config
@@ -443,73 +380,76 @@ serve(async (req) => {
       .maybeSingle();
 
     if (groupError || !group) {
-      return new Response(
-        JSON.stringify({ ok: false, error: "Group not found" }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return errorResponse("precheck", "Group not found", groupError?.message, groupError?.code);
     }
 
     const courtNumbers: number[] = group.court_ids || [];
     const N = courtNumbers.length;
 
     if (N < 1) {
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          error: "Group has no courts assigned",
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return errorResponse("precheck", "Group has no courts assigned");
     }
+
+    const effectiveSessionId = sessionId || group.session_id || null;
 
     const durationHours: number = group.duration_hours || 2;
     const matchesPerHour: number = group.matches_per_hour || 6;
     const totalMatches: number =
       group.total_matches || Math.round(durationHours * matchesPerHour * N);
 
+    // ── Precheck: existing matches for this group+session ──
+    let existingQuery = supabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .eq("group_id", groupId);
+    if (effectiveSessionId) {
+      existingQuery = existingQuery.eq("session_id", effectiveSessionId);
+    }
+    const { count: existingCount } = await existingQuery;
+
+    if (existingCount && existingCount > 0) {
+      return errorResponse(
+        "precheck",
+        "Rotation already exists for this group. Please Reset Group to regenerate.",
+      );
+    }
+
     // Fetch players scoped to this group + session
-    const playerQuery = supabase
+    let playerQuery = supabase
       .from("players")
       .select("id, name")
       .eq("group_id", groupId)
       .order("created_at", { ascending: true });
 
-    if (sessionId) {
-      playerQuery.eq("session_id", sessionId);
+    if (effectiveSessionId) {
+      playerQuery = playerQuery.eq("session_id", effectiveSessionId);
     }
 
     const { data: players, error: playersError } = await playerQuery;
 
     if (playersError) {
-      return new Response(
-        JSON.stringify({ ok: false, error: "Failed to fetch players" }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return errorResponse("players", "Failed to fetch players", playersError.message, playersError.code);
     }
 
     const P = players?.length || 0;
+
+    if (P === 0) {
+      return errorResponse("players", "No players found for this group and session. Add players first.");
+    }
+
+    // Validate player IDs
+    const missingIds = (players || []).filter((p) => !p.id);
+    if (missingIds.length > 0) {
+      return errorResponse("players", "Some players are missing IDs. Please resave players and try again.");
+    }
+
     const minPlayers = 4 * N;
     const maxPlayers = 8 * N;
 
     if (P < minPlayers || P > maxPlayers) {
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          error: `Invalid player count: ${P}. For ${N} courts, need ${minPlayers}-${maxPlayers} players.`,
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
+      return errorResponse(
+        "validation",
+        `Invalid player count: ${P}. For ${N} courts, need ${minPlayers}-${maxPlayers} players.`,
       );
     }
 
@@ -519,12 +459,7 @@ serve(async (req) => {
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       const seed = Date.now() + attempt * 31337;
-      const result = generateGroupRotation(
-        players,
-        courtNumbers,
-        totalMatches,
-        seed,
-      );
+      const result = generateGroupRotation(players, courtNumbers, totalMatches, seed);
 
       if (!bestResult) {
         bestResult = result;
@@ -539,7 +474,6 @@ serve(async (req) => {
         bestResult = result;
       }
 
-      // Perfect result
       if (
         result.diagnostics.repeat_partner_count === 0 &&
         result.diagnostics.back_to_back_batch_violations === 0 &&
@@ -559,46 +493,43 @@ serve(async (req) => {
       }),
     );
 
-    // Delete existing group matches
-    await supabase.from("matches").delete().eq("group_id", groupId);
-
-    // Delete existing group_court_state
-    await supabase.from("group_court_state").delete().eq("group_id", groupId);
-
-    // Insert matches
+    // Build match inserts — court_id uses court_number (integer, NOT NULL)
     const matchInserts = result.matches.map((m) => ({
       group_id: groupId,
       court_number: m.court_number,
       global_match_index: m.global_match_index,
-      match_index: m.global_match_index - 1, // keep match_index for compat
-      court_id: m.court_number, // use court_number as court_id for group matches
+      match_index: m.global_match_index - 1,
+      court_id: m.court_number,
       team1_player1_id: m.team1_player1_id,
       team1_player2_id: m.team1_player2_id,
       team2_player1_id: m.team2_player1_id,
       team2_player2_id: m.team2_player2_id,
       status: "pending",
       override_played: false,
-      session_id: sessionId || group.session_id || null,
+      session_id: effectiveSessionId,
     }));
 
+    // Single bulk insert — atomic (no partial inserts with Supabase bulk insert)
     const { error: insertError } = await supabase
       .from("matches")
       .insert(matchInserts);
 
     if (insertError) {
-      console.error("Insert error:", insertError);
-      return new Response(
-        JSON.stringify({ ok: false, error: "Failed to save rotation" }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
+      console.error("Insert error:", JSON.stringify(insertError));
+      return errorResponse(
+        "insert_matches",
+        `Failed to save rotation: ${insertError.message}`,
+        JSON.stringify(insertError),
+        insertError.code,
       );
     }
 
+    // Delete existing group_court_state (cleanup before reinit)
+    await supabase.from("group_court_state").delete().eq("group_id", groupId);
+
     // Initialize group_court_state for each court
     const stateInserts = courtNumbers.map((cn) => ({
-      session_id: sessionId || group.session_id || null,
+      session_id: effectiveSessionId,
       group_id: groupId,
       court_number: cn,
       current_match_global_index: null,
@@ -606,7 +537,11 @@ serve(async (req) => {
       is_live: false,
     }));
 
-    await supabase.from("group_court_state").insert(stateInserts);
+    const { error: stateError } = await supabase.from("group_court_state").insert(stateInserts);
+    if (stateError) {
+      console.error("State insert error:", JSON.stringify(stateError));
+      // Non-fatal, rotation was saved
+    }
 
     // Update group with total_matches and lock
     await supabase
@@ -623,14 +558,7 @@ serve(async (req) => {
     });
   } catch (error: unknown) {
     console.error("Unexpected error:", error);
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    return new Response(
-      JSON.stringify({ ok: false, error: errorMessage }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return errorResponse("unexpected", errorMessage, String(error));
   }
 });
