@@ -279,6 +279,9 @@ const AdminGroup = () => {
     },
   });
 
+  // Reset state includes clearPlayers checkbox
+  const [clearPlayersOnReset, setClearPlayersOnReset] = useState(false);
+
   // Generate rotation
   const generateRotation = useMutation({
     mutationFn: async () => {
@@ -287,38 +290,38 @@ const AdminGroup = () => {
       const { data, error } = await supabase.functions.invoke("generate-group-rotation", {
         body: { groupId, sessionId },
       });
-      if (error) throw error;
+      if (error) throw new Error(error.message || "Network error calling rotation function");
       return data;
     },
     onSuccess: (data: any) => {
+      if (!data?.ok) {
+        const msg = data?.message || data?.error || "Failed to generate";
+        toast.error(`Failed: ${msg}`);
+        if (data?.details) console.error("Rotation error details:", data.details);
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ["group_matches", groupId] });
       queryClient.invalidateQueries({ queryKey: ["group_court_state", groupId] });
       queryClient.invalidateQueries({ queryKey: ["court_group", groupId] });
       setPlayersOpen(false);
-      if (!data?.ok) {
-        toast.error(data?.error || "Failed to generate");
-        return;
-      }
       if (data.generation_mode?.includes("fallback")) {
         toast.info("Rotation generated in Basic Mode");
       } else {
         toast.success("Rotation generated!");
       }
     },
-    onError: () => toast.error("Failed to generate rotation"),
+    onError: (err: Error) => toast.error(`Failed to generate rotation: ${err.message}`),
   });
 
-  // Reset group
+  // Reset group via edge function
   const resetGroup = useMutation({
     mutationFn: async () => {
-      await supabase.from("group_court_state" as any).delete().eq("group_id", groupId!);
-      await supabase.from("match_substitutions").delete().eq("group_id", groupId! as any);
-      await supabase.from("matches").delete().eq("group_id", groupId!);
-      await supabase.from("players").delete().eq("group_id", groupId!);
-      await supabase
-        .from("court_groups")
-        .update({ is_locked: false, locked_at: null, total_matches: null } as any)
-        .eq("id", groupId!);
+      const { data, error } = await supabase.functions.invoke("reset-group", {
+        body: { groupId, sessionId, clearPlayers: clearPlayersOnReset },
+      });
+      if (error) throw new Error(error.message || "Network error");
+      if (!data?.ok) throw new Error(data?.message || "Reset failed");
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["group_matches", groupId] });
@@ -328,8 +331,10 @@ const AdminGroup = () => {
       setShowResetDialog(false);
       setResetPhrase("");
       setPlayersOpen(true);
+      setClearPlayersOnReset(false);
       toast.success("Group reset");
     },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   // Start match on a panel
@@ -612,15 +617,20 @@ const AdminGroup = () => {
 
                   {/* Generate / Match Control */}
                   {!hasRotation ? (
-                    <Button
-                      onClick={() => generateRotation.mutate()}
-                      disabled={!canGenerate || generateRotation.isPending}
-                      className="w-full h-12 text-lg rounded-xl"
-                    >
-                      {generateRotation.isPending ? "Generating..." : "Generate Rotation"}
-                    </Button>
+                    <div className="space-y-2">
+                      <Button
+                        onClick={() => generateRotation.mutate()}
+                        disabled={!canGenerate || generateRotation.isPending}
+                        className="w-full h-12 text-lg rounded-xl"
+                      >
+                        {generateRotation.isPending ? "Generating..." : "Generate Rotation"}
+                      </Button>
+                    </div>
                   ) : (
                     <>
+                      <div className="rounded-lg bg-muted/50 p-3 text-center">
+                        <p className="text-sm text-muted-foreground">Rotation locked. Use <span className="font-semibold text-destructive">Reset Group</span> to restart.</p>
+                      </div>
                       {/* ── Per-court scoring panels ── */}
                       {courtNumbers.map(cn => {
                         const state = getStateForCourt(cn);
@@ -765,20 +775,47 @@ const AdminGroup = () => {
                       <CardHeader><CardTitle className="text-lg text-destructive">Danger Zone</CardTitle></CardHeader>
                       <CardContent>
                         {!showResetDialog ? (
-                          <Button
-                            variant="outline"
-                            onClick={() => setShowResetDialog(true)}
-                            className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                          >
-                            Reset Group
-                          </Button>
+                          <div className="space-y-2">
+                            <Button
+                              variant="outline"
+                              onClick={() => setShowResetDialog(true)}
+                              className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                            >
+                              Reset Group
+                            </Button>
+                            <p className="text-xs text-muted-foreground text-center">
+                              Deletes the rotation, scores, and live state for this group only. Other courts/groups remain untouched.
+                            </p>
+                          </div>
                         ) : (
                           <div className="space-y-4">
-                            <p className="text-sm text-muted-foreground">Type "RESET GROUP" to confirm</p>
+                            <p className="text-sm text-muted-foreground">
+                              This will delete the group rotation, scores, and live state for this group only. Other courts/groups remain untouched.
+                            </p>
+                            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={clearPlayersOnReset}
+                                onChange={e => setClearPlayersOnReset(e.target.checked)}
+                                className="rounded border-border"
+                              />
+                              Also clear guest players
+                            </label>
+                            <p className="text-sm text-muted-foreground">Type <span className="font-semibold">RESET GROUP</span> to confirm</p>
                             <Input placeholder="RESET GROUP" value={resetPhrase} onChange={e => setResetPhrase(e.target.value)} className="bg-secondary" />
                             <div className="flex gap-2">
-                              <Button variant="outline" onClick={() => { setShowResetDialog(false); setResetPhrase(""); }} className="flex-1">Cancel</Button>
-                              <Button variant="destructive" onClick={() => { if (resetPhrase.toUpperCase() === "RESET GROUP") resetGroup.mutate(); else toast.error("Invalid phrase"); }} className="flex-1">Reset</Button>
+                              <Button variant="outline" onClick={() => { setShowResetDialog(false); setResetPhrase(""); setClearPlayersOnReset(false); }} className="flex-1">Cancel</Button>
+                              <Button
+                                variant="destructive"
+                                disabled={resetGroup.isPending}
+                                onClick={() => {
+                                  if (resetPhrase.toUpperCase() === "RESET GROUP") resetGroup.mutate();
+                                  else toast.error("Type RESET GROUP to confirm");
+                                }}
+                                className="flex-1"
+                              >
+                                {resetGroup.isPending ? "Resetting..." : "Reset Group"}
+                              </Button>
                             </div>
                           </div>
                         )}
