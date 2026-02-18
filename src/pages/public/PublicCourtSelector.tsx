@@ -22,13 +22,13 @@ const PublicCourtSelector = () => {
   const { renderItems, configLoading, sessionConfig } = useScopedCourts();
   const { isEnded, activeSession, sessionLoading } = useActiveSession();
 
-  // Fetch court_groups for the current session config to resolve group IDs
+  // Fetch court_groups for the current session to resolve group IDs
   const { data: courtGroups = [] } = useQuery({
-    queryKey: ["court_groups_public", sessionConfig?.id],
+    queryKey: ["court_groups_public", sessionConfig?.id, activeSession?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("court_groups")
-        .select("id, court_ids")
+        .select("id, court_ids, session_id")
         .eq("session_config_id", sessionConfig!.id);
       if (error) throw error;
       return data || [];
@@ -86,11 +86,13 @@ const PublicCourtSelector = () => {
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
               {renderItems.map((item) => {
                 if (item.type === "group") {
-                  // Find the court_group record matching this unit's court numbers
+                  // Find the court_group record matching this unit's court numbers + current session
+                  const currentSessionId = activeSession?.id || null;
+                  const itemNums = [...(item.courtNumbers || [])].sort((a, b) => a - b);
                   const matchingGroup = courtGroups.find(cg => {
                     const cgNums = [...(cg.court_ids || [])].sort((a, b) => a - b);
-                    const itemNums = [...(item.courtNumbers || [])].sort((a, b) => a - b);
-                    return JSON.stringify(cgNums) === JSON.stringify(itemNums);
+                    const idsMatch = JSON.stringify(cgNums) === JSON.stringify(itemNums);
+                    return idsMatch && (cg.session_id === currentSessionId || cg.session_id === null);
                   });
 
                   if (matchingGroup) {
