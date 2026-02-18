@@ -453,6 +453,55 @@ serve(async (req) => {
       );
     }
 
+    // ── Ensure group_physical_courts exist ──────────────────
+    // For each court_number, we need a unique courts.id
+    const courtIdMap: Record<number, number> = {};
+
+    for (const cn of courtNumbers) {
+      // Check if mapping already exists
+      const { data: existing } = await supabase
+        .from("group_physical_courts")
+        .select("court_id")
+        .eq("group_id", groupId)
+        .eq("court_number", cn)
+        .eq("session_id", effectiveSessionId)
+        .maybeSingle();
+
+      if (existing?.court_id) {
+        courtIdMap[cn] = existing.court_id;
+      } else {
+        // Create a new courts row for this group physical court
+        const { data: newCourt, error: courtErr } = await supabase
+          .from("courts")
+          .insert({
+            name: `Group Court ${cn}`,
+            session_id: effectiveSessionId,
+          })
+          .select("id")
+          .single();
+
+        if (courtErr || !newCourt) {
+          return errorResponse("precheck", `Failed to create court entry for court ${cn}`, courtErr?.message);
+        }
+
+        // Create mapping row
+        const { error: mapErr } = await supabase
+          .from("group_physical_courts")
+          .insert({
+            group_id: groupId,
+            court_number: cn,
+            court_id: newCourt.id,
+            session_id: effectiveSessionId,
+          });
+
+        if (mapErr) {
+          return errorResponse("precheck", `Failed to create court mapping for court ${cn}`, mapErr.message);
+        }
+
+        courtIdMap[cn] = newCourt.id;
+      }
+    }
+
     // Generate rotation with retry
     let bestResult: ReturnType<typeof generateGroupRotation> | null = null;
     const MAX_ATTEMPTS = 50;
@@ -493,23 +542,34 @@ serve(async (req) => {
       }),
     );
 
-    // Build match inserts — court_id uses court_number (integer, NOT NULL)
-    const matchInserts = result.matches.map((m) => ({
-      group_id: groupId,
-      court_number: m.court_number,
-      global_match_index: m.global_match_index,
-      match_index: m.global_match_index - 1,
-      court_id: m.court_number,
-      team1_player1_id: m.team1_player1_id,
-      team1_player2_id: m.team1_player2_id,
-      team2_player1_id: m.team2_player1_id,
-      team2_player2_id: m.team2_player2_id,
-      status: "pending",
-      override_played: false,
-      session_id: effectiveSessionId,
-    }));
+    // Build match inserts — court_id from group_physical_courts, match_index is local per-court
+    const perCourtCounter: Record<number, number> = {};
+    const matchInserts = result.matches.map((m) => {
+      const physicalCourtId = courtIdMap[m.court_number];
+      // Compute local per-court match_index (0-based for legacy compat)
+      if (perCourtCounter[m.court_number] === undefined) {
+        perCourtCounter[m.court_number] = 0;
+      }
+      const localIndex = perCourtCounter[m.court_number];
+      perCourtCounter[m.court_number]++;
 
-    // Single bulk insert — atomic (no partial inserts with Supabase bulk insert)
+      return {
+        group_id: groupId,
+        court_number: m.court_number,
+        global_match_index: m.global_match_index,
+        match_index: localIndex,
+        court_id: physicalCourtId,
+        team1_player1_id: m.team1_player1_id,
+        team1_player2_id: m.team1_player2_id,
+        team2_player1_id: m.team2_player1_id,
+        team2_player2_id: m.team2_player2_id,
+        status: "pending",
+        override_played: false,
+        session_id: effectiveSessionId,
+      };
+    });
+
+    // Single bulk insert — atomic
     const { error: insertError } = await supabase
       .from("matches")
       .insert(matchInserts);
