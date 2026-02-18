@@ -392,6 +392,55 @@ export type Database = {
           },
         ]
       }
+      group_physical_courts: {
+        Row: {
+          court_id: number
+          court_number: number
+          created_at: string
+          group_id: string
+          id: string
+          session_id: string | null
+        }
+        Insert: {
+          court_id: number
+          court_number: number
+          created_at?: string
+          group_id: string
+          id?: string
+          session_id?: string | null
+        }
+        Update: {
+          court_id?: number
+          court_number?: number
+          created_at?: string
+          group_id?: string
+          id?: string
+          session_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_physical_courts_court_id_fkey"
+            columns: ["court_id"]
+            isOneToOne: false
+            referencedRelation: "courts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_physical_courts_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "court_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_physical_courts_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       locations: {
         Row: {
           active: boolean
