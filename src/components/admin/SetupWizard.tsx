@@ -168,6 +168,48 @@ const SetupWizard = ({
           .eq("session_config_id", configId);
       }
 
+      // 1b. Find or create session for today + scope
+      const today = new Date().toISOString().split('T')[0];
+      let sessionQuery = supabase
+        .from("sessions" as any)
+        .select("id, status")
+        .eq("city_id", cityId)
+        .eq("event_type", scopeEventType)
+        .eq("date", today)
+        .in("status", ["draft", "live"]);
+      if (locationId) {
+        sessionQuery = sessionQuery.eq("location_id", locationId);
+      } else {
+        sessionQuery = sessionQuery.is("location_id", null);
+      }
+      const { data: existingSessions } = await (sessionQuery as any);
+
+      let activeSessionId: string;
+      if (existingSessions && existingSessions.length > 0) {
+        activeSessionId = existingSessions[0].id;
+      } else {
+        const { data: newSession, error: sessionError } = await supabase
+          .from("sessions" as any)
+          .insert({
+            city_id: cityId,
+            event_type: scopeEventType,
+            location_id: locationId,
+            date: today,
+            is_active: false,
+            status: "draft",
+          } as any)
+          .select("id")
+          .single();
+        if (sessionError) throw sessionError;
+        activeSessionId = (newSession as any).id;
+      }
+
+      // Link session to session_config
+      await supabase
+        .from("session_configs" as any)
+        .update({ session_id: activeSessionId } as any)
+        .eq("id", configId);
+
       // 2. Create court records (upsert-style: create if not exist)
       for (let i = 1; i <= courtCount; i++) {
         const format = courtFormats[i] || "mystery_partner";
@@ -246,6 +288,7 @@ const SetupWizard = ({
           session_config_id: configId,
           court_ids: courtIds,
           format_type: g.formatType,
+          session_id: activeSessionId,
         } as any);
       }
 
@@ -338,72 +381,31 @@ const SetupWizard = ({
           format_type: g.formatType,
         } as any);
       }
-    },
-    onSuccess: async () => {
-      // Create or fetch draft session for today's date + scope
-      try {
-        const today = new Date().toISOString().split('T')[0];
-        // Try to find existing non-ended session for today
-        let sessionQuery = supabase
-          .from("sessions" as any)
-          .select("id, status")
-          .eq("city_id", cityId)
-          .eq("event_type", scopeEventType)
-          .eq("date", today)
-          .in("status", ["draft", "live"]);
-        if (locationId) {
-          sessionQuery = sessionQuery.eq("location_id", locationId);
-        } else {
-          sessionQuery = sessionQuery.is("location_id", null);
-        }
-        const { data: existingSessions } = await (sessionQuery as any);
 
-        let sessionId: string;
-        if (existingSessions && existingSessions.length > 0) {
-          sessionId = existingSessions[0].id;
-        } else {
-          const { data: newSession, error: sessionError } = await supabase
-            .from("sessions" as any)
-            .insert({
-              city_id: cityId,
-              event_type: scopeEventType,
-              location_id: locationId,
-              date: today,
-              is_active: false,
-              status: "draft",
-            } as any)
-            .select("id")
-            .single();
-          if (sessionError) throw sessionError;
-          sessionId = (newSession as any).id;
+      // 6. Link all courts to this session
+      let courtsToLink = supabase
+        .from("courts")
+        .select("id")
+        .eq("event_id", eventId);
+      if (locationId) {
+        courtsToLink = courtsToLink.eq("location_id", locationId);
+      } else {
+        courtsToLink = courtsToLink.is("location_id", null);
+      }
+      const { data: courtsToLinkData } = await courtsToLink;
+      if (courtsToLinkData) {
+        for (const court of courtsToLinkData) {
+          await supabase
+            .from("courts")
+            .update({ session_id: activeSessionId } as any)
+            .eq("id", (court as any).id);
         }
-
-        // Link all courts for this event/location to this session
-        let courtsToLink = supabase
-          .from("courts")
-          .select("id")
-          .eq("event_id", eventId);
-        if (locationId) {
-          courtsToLink = courtsToLink.eq("location_id", locationId);
-        } else {
-          courtsToLink = courtsToLink.is("location_id", null);
-        }
-        const { data: courtsData } = await courtsToLink;
-        if (courtsData) {
-          for (const court of courtsData) {
-            await supabase
-              .from("courts")
-              .update({ session_id: sessionId } as any)
-              .eq("id", court.id);
-          }
-        }
-
-        // Store session_id in localStorage
-        localStorage.setItem("gp_session_id", sessionId);
-      } catch (err) {
-        console.error("Session creation warning:", err);
       }
 
+      return activeSessionId;
+    },
+    onSuccess: (sessionId: string) => {
+      localStorage.setItem("gp_session_id", sessionId);
       queryClient.invalidateQueries({ queryKey: ["session_config"] });
       queryClient.invalidateQueries({ queryKey: ["courts"] });
       queryClient.invalidateQueries({ queryKey: ["court_groups"] });

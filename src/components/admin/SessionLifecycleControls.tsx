@@ -79,12 +79,10 @@ const SessionLifecycleControls = ({ setupCompleted }: SessionLifecycleControlsPr
   };
 
   const handleReset = () => {
-    if (isLive) {
-      const expected = "RESET SESSION";
-      if (resetPhrase.toUpperCase() !== expected) {
-        toast.error(`Type "${expected}" to confirm`);
-        return;
-      }
+    const expected = "RESET SESSION";
+    if (resetPhrase.toUpperCase() !== expected) {
+      toast.error(`Type "${expected}" to confirm`);
+      return;
     }
     resetSession.mutate();
     setShowResetDialog(false);
@@ -181,22 +179,20 @@ const SessionLifecycleControls = ({ setupCompleted }: SessionLifecycleControlsPr
           <AlertDialogHeader>
             <AlertDialogTitle>Reset session?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will start a fresh session for this scope. Past session data will remain archived and downloadable.
+              This will delete all matches, players, groups, and scoring data for this session. The setup wizard will reopen for a fresh configuration.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {isLive && (
-            <div className="px-1">
-              <p className="text-sm text-muted-foreground mb-2">
-                Type <strong>RESET SESSION</strong> to confirm:
-              </p>
-              <Input
-                value={resetPhrase}
-                onChange={(e) => setResetPhrase(e.target.value)}
-                placeholder="RESET SESSION"
-                className="font-mono"
-              />
-            </div>
-          )}
+          <div className="px-1">
+            <p className="text-sm text-muted-foreground mb-2">
+              Type <strong>RESET SESSION</strong> to confirm:
+            </p>
+            <Input
+              value={resetPhrase}
+              onChange={(e) => setResetPhrase(e.target.value)}
+              placeholder="RESET SESSION"
+              className="font-mono"
+            />
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setResetPhrase("")}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleReset} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">

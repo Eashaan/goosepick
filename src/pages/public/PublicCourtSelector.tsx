@@ -26,10 +26,14 @@ const PublicCourtSelector = () => {
   const { data: courtGroups = [] } = useQuery({
     queryKey: ["court_groups_public", sessionConfig?.id, activeSession?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("court_groups")
         .select("id, court_ids, session_id")
         .eq("session_config_id", sessionConfig!.id);
+      if (activeSession?.id) {
+        query = query.eq("session_id", activeSession.id);
+      }
+      const { data, error } = await query;
       if (error) throw error;
       return data || [];
     },
