@@ -19,6 +19,8 @@ import FormatSelector from "@/components/admin/FormatSelector";
 import { Database } from "@/integrations/supabase/types";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useCourtContextGuard } from "@/hooks/useCourtContextGuard";
+import { useEventContext } from "@/hooks/useEventContext";
+import { useActiveSession } from "@/hooks/useActiveSession";
 import PlayerSwapModal from "@/components/admin/PlayerSwapModal";
 
 type FormatType = "mystery_partner" | "round_robin" | "format_3" | "format_4" | "format_5";
@@ -103,6 +105,8 @@ const AdminCourt = () => {
   const courtNumber = parseInt(courtId || "1");
   const { isAdmin, isLoading: authLoading } = useAdminAuth();
   const { isValidating } = useCourtContextGuard(courtNumber);
+  const { selectedCityId, selectedLocationId, scopeEventType } = useEventContext();
+  const { activeSession } = useActiveSession();
 
   const [newPlayerName, setNewPlayerName] = useState("");
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
@@ -413,32 +417,41 @@ const AdminCourt = () => {
     },
   });
 
-  // Reset court mutation — deletes all data scoped to this specific court
+  // Reset court mutation — calls edge function scoped to this ungrouped court
   const resetCourt = useMutation({
     mutationFn: async () => {
-      // Delete feedback for this court
-      await supabase.from("feedback").delete().eq("court_id", courtNumber);
-      // Delete match substitutions for this court
-      await supabase.from("match_substitutions").delete().eq("court_id", courtNumber);
-      // Delete matches for this court
-      await supabase.from("matches").delete().eq("court_id", courtNumber);
-      // Delete players for this court
-      await supabase.from("players").delete().eq("court_id", courtNumber);
-      // Reset court state
-      await supabase
-        .from("court_state")
-        .update({ current_match_index: 0, phase: "idle", updated_at: new Date().toISOString() })
-        .eq("court_id", courtNumber);
+      const sessionId = activeSession?.id;
+      if (!sessionId) throw new Error("No active session found");
+
+      const { data, error } = await supabase.functions.invoke("reset-ungrouped-court", {
+        body: {
+          courtId: courtNumber,
+          sessionId,
+          cityId: selectedCityId,
+          eventType: scopeEventType,
+          locationId: selectedLocationId || null,
+        },
+      });
+      if (error) throw new Error(error.message || "Network error");
+      if (!data?.ok) throw new Error(data?.message || "Reset failed");
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["players", courtNumber] });
       queryClient.invalidateQueries({ queryKey: ["matches", courtNumber] });
       queryClient.invalidateQueries({ queryKey: ["court_state", courtNumber] });
+      queryClient.invalidateQueries({ queryKey: ["court_details", courtNumber] });
       queryClient.invalidateQueries({ queryKey: ["locked_courts"] });
+      queryClient.invalidateQueries({ queryKey: ["court_states_dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["court_match_counts"] });
       setShowResetDialog(false);
       setResetPhrase("");
       setPlayersOpen(true);
+      setRotationDiagnostics(null);
       toast.success("Court reset successfully");
+    },
+    onError: (err: Error) => {
+      toast.error(err.message);
     },
   });
 

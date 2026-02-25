@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.reset-session]
 verify_jwt = false
+
+[functions.reset-ungrouped-court]
+verify_jwt = false
