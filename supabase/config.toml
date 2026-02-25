@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.reset-group]
 verify_jwt = false
+
+[functions.reset-session]
+verify_jwt = false

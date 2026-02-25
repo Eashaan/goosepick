@@ -217,44 +217,34 @@ export function useActiveSession() {
     },
   });
 
-  // Reset Session (creates a new draft after ending current)
+  // Reset Session — wipes all data and resets to fresh state
   const resetSession = useMutation({
     mutationFn: async () => {
-      // If live, end it first
-      if (activeSession?.status === "live") {
-        await supabase
-          .from("sessions" as any)
-          .update({
-            status: "ended",
-            ended_at: new Date().toISOString(),
-            is_active: false,
-          } as any)
-          .eq("id", activeSession.id);
-      }
-
-      // Create a fresh draft
-      const today = new Date().toISOString().split("T")[0];
-      const { data, error } = await supabase
-        .from("sessions" as any)
-        .insert({
-          city_id: selectedCityId,
-          event_type: scopeEventType,
-          location_id: selectedLocationId,
-          date: today,
-          is_active: false,
-          status: "draft",
-        } as any)
-        .select("id")
-        .single();
-      if (error) throw error;
-      return (data as any).id;
+      if (!activeSession?.id) throw new Error("No active session to reset.");
+      const { data, error } = await supabase.functions.invoke("reset-session", {
+        body: {
+          sessionId: activeSession.id,
+          cityId: selectedCityId,
+          eventType: scopeEventType,
+          locationId: selectedLocationId || null,
+        },
+      });
+      if (error) throw new Error(error.message || "Network error");
+      if (!data?.ok) throw new Error(data?.message || "Reset failed");
+      return data;
     },
-    onSuccess: (newSessionId) => {
-      localStorage.setItem("gp_session_id", newSessionId);
+    onSuccess: () => {
       invalidateSession();
       queryClient.invalidateQueries({ queryKey: ["session_config"] });
       queryClient.invalidateQueries({ queryKey: ["court_units"] });
-      toast.success("Session reset. Configure a fresh setup.");
+      queryClient.invalidateQueries({ queryKey: ["court_groups"] });
+      queryClient.invalidateQueries({ queryKey: ["group_matches"] });
+      queryClient.invalidateQueries({ queryKey: ["group_players"] });
+      queryClient.invalidateQueries({ queryKey: ["group_court_state"] });
+      queryClient.invalidateQueries({ queryKey: ["court_states_dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["court_match_counts"] });
+      queryClient.invalidateQueries({ queryKey: ["group_status_dashboard"] });
+      toast.success("Session reset. Setup wizard is ready for a fresh configuration.");
     },
     onError: (err: Error) => {
       toast.error(err.message);
