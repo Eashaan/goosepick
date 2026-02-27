@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Download, X } from "lucide-react";
 import { Database } from "@/integrations/supabase/types";
 import { toast } from "sonner";
+import { format } from "date-fns";
 import goosepickSocialLogo from "@/assets/goosepick-social-logo.png";
 
 type Match = Database["public"]["Tables"]["matches"]["Row"];
