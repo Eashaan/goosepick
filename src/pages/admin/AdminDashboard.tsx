@@ -129,7 +129,6 @@ const AdminDashboard = () => {
   });
 
   // Fetch group-level status data (players + matches per group for this session)
-  const currentSessionId = activeSession?.id || null;
   const { data: groupStatusMap = new Map<string, { playerCount: number; matchCount: number; hasLive: boolean }>() } = useQuery({
     queryKey: ["group_status_dashboard", sessionConfig?.id, currentSessionId],
     queryFn: async () => {
