@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, Settings } from "lucide-react";
+import AdminManagement from "@/components/admin/AdminManagement";
 import { toast } from "sonner";
 import PageLayout from "@/components/layout/PageLayout";
 import GlobalHeader from "@/components/layout/GlobalHeader";
@@ -331,6 +332,7 @@ const AdminDashboard = () => {
                 <p className="text-xs text-muted-foreground">Signed in as {user.email}</p>
               )}
             </div>
+            {user && <AdminManagement currentUserId={user.id} />}
             {setupCompleted && !showEditSetup && (
               <Button variant="ghost" size="icon" onClick={() => setShowEditSetup(true)}>
                 <Settings className="h-5 w-5" />
