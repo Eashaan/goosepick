@@ -67,17 +67,28 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
     const currentMatchIndex = courtState.current_match_index;
     const phase = courtState.phase;
 
-    // Check if player is in current match
-    const currentMatch = matches.find(m => m.match_index === currentMatchIndex);
-    const isInCurrentMatch = currentMatch && (
-      currentMatch.team1_player1_id === selectedPlayerId ||
-      currentMatch.team1_player2_id === selectedPlayerId ||
-      currentMatch.team2_player1_id === selectedPlayerId ||
-      currentMatch.team2_player2_id === selectedPlayerId
+    // Check if player is in a match of the current round
+    // In group mode, multiple matches share the same match_index (round)
+    const currentRoundMatches = matches.filter(m => m.match_index === currentMatchIndex);
+    const isInCurrentMatch = currentRoundMatches.some(m =>
+      m.team1_player1_id === selectedPlayerId ||
+      m.team1_player2_id === selectedPlayerId ||
+      m.team2_player1_id === selectedPlayerId ||
+      m.team2_player2_id === selectedPlayerId
     );
 
     if (phase === "in_progress" && isInCurrentMatch) {
-      return { text: `You're live on Court ${courtId}.`, type: "playing" };
+      // Find which court number the player is on
+      const playerCurrentMatch = currentRoundMatches.find(m =>
+        m.team1_player1_id === selectedPlayerId ||
+        m.team1_player2_id === selectedPlayerId ||
+        m.team2_player1_id === selectedPlayerId ||
+        m.team2_player2_id === selectedPlayerId
+      );
+      const courtLabel = playerCurrentMatch?.court_number
+        ? `Court ${playerCurrentMatch.court_number}`
+        : `Court ${courtId}`;
+      return { text: `You're live on ${courtLabel}.`, type: "playing" };
     }
 
     // Find next match for player - use status field
@@ -91,14 +102,16 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
 
     if (!nextPlayerMatch) return null;
 
-    // Count how many uncompleted matches are before the player's next match
-    const uncompletedMatchesBefore = matches.filter(m => 
-      m.status !== "completed" && m.match_index < nextPlayerMatch.match_index
-    ).length;
+    // Count uncompleted rounds (not individual matches) before the player's next round
+    const uncompletedRoundsBefore = new Set(
+      matches
+        .filter(m => m.status !== "completed" && m.match_index < nextPlayerMatch.match_index)
+        .map(m => m.match_index)
+    ).size;
 
-    if (uncompletedMatchesBefore === 0) {
+    if (uncompletedRoundsBefore === 0) {
       return { text: "You're up next. Grab water & be courtside.", type: "next" };
-    } else if (uncompletedMatchesBefore === 1) {
+    } else if (uncompletedRoundsBefore === 1) {
       return { text: "You've got time. Stretch or watch the match.", type: "soon" };
     }
 
