@@ -39,10 +39,6 @@ const PublicGroup = () => {
       // Scope: group must belong to current session OR have no session
       const { data, error } = await query.maybeSingle();
       if (error) throw error;
-      // Validate the group belongs to current session scope
-      if (data && sessionId && data.session_id && data.session_id !== sessionId) {
-        return null; // Wrong session
-      }
       return data;
     },
     enabled: !!groupId && isContextValid && !sessionLoading,
