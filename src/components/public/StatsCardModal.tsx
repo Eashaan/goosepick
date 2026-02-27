@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Download, X } from "lucide-react";
 import { Database } from "@/integrations/supabase/types";
 import { toast } from "sonner";
+import { format } from "date-fns";
 import goosepickSocialLogo from "@/assets/goosepick-social-logo.png";
 
 type Match = Database["public"]["Tables"]["matches"]["Row"];
@@ -138,7 +139,7 @@ const StatsCardModal = ({
               <h2 className="text-xs font-semibold text-[#FF4200] mb-0.5">
                 India's Most Happening Pickleball Experience
               </h2>
-              <p className="text-[10px] text-gray-400">February 1, 2026</p>
+              <p className="text-[10px] text-gray-400">{format(new Date(), "MMMM d, yyyy")}</p>
             </div>
 
             {/* Player Name Title */}
