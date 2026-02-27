@@ -209,11 +209,10 @@ serve(async (req) => {
       );
     }
 
-    // Reset court state
+    // Reset/upsert court state for this court + session
     const { error: stateError } = await supabase
       .from("court_state")
-      .update({ current_match_index: 0, phase: "idle", updated_at: new Date().toISOString() })
-      .eq("court_id", courtId);
+      .upsert({ court_id: courtId, session_id: resolvedSessionId, current_match_index: 0, phase: "idle", updated_at: new Date().toISOString() }, { onConflict: "court_id" });
     
     if (stateError) {
       console.error("Database error updating court state:", stateError);
