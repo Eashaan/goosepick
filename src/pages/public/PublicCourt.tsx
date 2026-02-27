@@ -52,19 +52,20 @@ const PublicCourt = () => {
     enabled: !isValidating && !!activeSessionId,
   });
 
-  // Fetch court state
+  // Fetch court state (scoped to session)
   const { data: courtState } = useQuery({
-    queryKey: ["court_state", courtNumber],
+    queryKey: ["court_state", courtNumber, activeSessionId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("court_state")
         .select("*")
         .eq("court_id", courtNumber)
+        .eq("session_id", activeSessionId!)
         .maybeSingle();
       if (error) throw error;
       return data;
     },
-    enabled: !isValidating,
+    enabled: !isValidating && !!activeSessionId,
   });
 
   // Fetch court details for display name
