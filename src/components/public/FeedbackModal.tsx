@@ -49,6 +49,7 @@ const FeedbackModal = ({
           player_id: playerId,
           rating,
           note: trimmedNote || null,
+          group_id: groupId || null,
         },
       });
 
