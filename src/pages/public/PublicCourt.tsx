@@ -87,31 +87,31 @@ const PublicCourt = () => {
 
   // Set up realtime subscriptions
   useEffect(() => {
-    if (isValidating) return;
+    if (isValidating || !activeSessionId) return;
 
     const channel = supabase
-      .channel(`court-${courtNumber}`)
+      .channel(`court-${courtNumber}-${activeSessionId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "court_state", filter: `court_id=eq.${courtNumber}` },
-        () => queryClient.invalidateQueries({ queryKey: ["court_state", courtNumber] })
+        () => queryClient.invalidateQueries({ queryKey: ["court_state", courtNumber, activeSessionId] })
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "matches", filter: `court_id=eq.${courtNumber}` },
-        () => queryClient.invalidateQueries({ queryKey: ["matches", courtNumber] })
+        () => queryClient.invalidateQueries({ queryKey: ["matches", courtNumber, activeSessionId] })
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "players", filter: `court_id=eq.${courtNumber}` },
-        () => queryClient.invalidateQueries({ queryKey: ["players", courtNumber] })
+        () => queryClient.invalidateQueries({ queryKey: ["players", courtNumber, activeSessionId] })
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [courtNumber, queryClient, isValidating]);
+  }, [courtNumber, queryClient, isValidating, activeSessionId]);
 
   if (isValidating) {
     return (

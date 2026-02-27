@@ -288,7 +288,7 @@ const AdminCourt = () => {
   const generateRotation = useMutation({
     mutationFn: async (): Promise<RotationResult> => {
       const { data, error } = await supabase.functions.invoke("generate-rotation", {
-        body: { courtId: courtNumber },
+        body: { courtId: courtNumber, sessionId: activeSessionId },
       });
       if (error) throw error;
       return data as RotationResult;

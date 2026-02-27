@@ -94,7 +94,7 @@ const PublicCourtSelector = () => {
                   const matchingGroup = courtGroups.find(cg => {
                     const cgNums = [...(cg.court_ids || [])].sort((a, b) => a - b);
                     const idsMatch = JSON.stringify(cgNums) === JSON.stringify(itemNums);
-                    return idsMatch && (cg.session_id === currentSessionId || cg.session_id === null);
+                    return idsMatch && cg.session_id === currentSessionId;
                   });
 
                   if (matchingGroup) {

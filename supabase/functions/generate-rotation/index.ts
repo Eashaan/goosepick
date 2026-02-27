@@ -255,7 +255,7 @@ serve(async (req) => {
       await auditDeleteQuery;
 
       await supabase.from("rotation_audit").insert({
-        session_id: courtRow?.session_id || null,
+        session_id: resolvedSessionId,
         court_id: courtId,
         total_players: n,
         matches_per_player_min: diag.min_matches_per_player,
