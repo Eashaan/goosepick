@@ -247,15 +247,12 @@ serve(async (req) => {
       fairnessScore -= repeatOpponentCount * 1;
       fairnessScore = Math.max(0, fairnessScore);
 
-      // Get session_id from court
-      const { data: courtRow } = await supabase
-        .from("courts")
-        .select("session_id")
-        .eq("id", courtId)
-        .maybeSingle();
-
-      // Delete old audit for this court
-      await supabase.from("rotation_audit").delete().eq("court_id", courtId);
+      // Delete old audit for this court + session
+      let auditDeleteQuery = supabase.from("rotation_audit").delete().eq("court_id", courtId);
+      if (resolvedSessionId) {
+        auditDeleteQuery = auditDeleteQuery.eq("session_id", resolvedSessionId);
+      }
+      await auditDeleteQuery;
 
       await supabase.from("rotation_audit").insert({
         session_id: courtRow?.session_id || null,
