@@ -332,6 +332,7 @@ const AdminDashboard = () => {
                 <p className="text-xs text-muted-foreground">Signed in as {user.email}</p>
               )}
             </div>
+            {user && <AdminManagement currentUserId={user.id} />}
             {setupCompleted && !showEditSetup && (
               <Button variant="ghost" size="icon" onClick={() => setShowEditSetup(true)}>
                 <Settings className="h-5 w-5" />
