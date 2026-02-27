@@ -20,6 +20,7 @@ const FeedbackModal = ({
   onOpenChange,
   courtId,
   playerId,
+  groupId,
   onSubmitted,
 }: FeedbackModalProps) => {
   const [rating, setRating] = useState<"loved" | "good" | "okay" | null>(null);
