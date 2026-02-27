@@ -31,6 +31,7 @@ interface CourtUnit {
   format_type: string;
   is_locked: boolean;
   court_id: number | null;
+  court_group_id: string | null;
 }
 
 // ── Render item shared between Admin + Public ──────────
