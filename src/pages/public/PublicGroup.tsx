@@ -112,14 +112,20 @@ const PublicGroup = () => {
     const anyLive = courtStates.some(cs => cs.is_live);
     const allMatchesDone = matches.length > 0 && matches.every(m => m.status === "completed");
 
+    // Convert global index to 0-based round number
+    const N = group?.court_ids?.length || 1;
+    const currentRound = currentGlobalIndex > 0
+      ? Math.floor((currentGlobalIndex - 1) / N)
+      : 0;
+
     return {
       court_id: syntheticCourtId,
-      current_match_index: currentGlobalIndex,
+      current_match_index: currentRound,
       phase: allMatchesDone ? "completed" as const : anyLive ? "in_progress" as const : "idle" as const,
       session_id: group?.session_id ?? null,
       updated_at: new Date().toISOString(),
     };
-  }, [courtStates, matches, syntheticCourtId, group?.session_id]);
+  }, [courtStates, matches, syntheticCourtId, group?.session_id, group?.court_ids?.length]);
 
   // Realtime subscriptions
   useEffect(() => {
