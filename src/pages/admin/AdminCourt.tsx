@@ -150,18 +150,20 @@ const AdminCourt = () => {
   const currentFormat: FormatType = (courtDetails?.format_type as FormatType) || "mystery_partner";
   const isFormatEnabled = currentFormat === "mystery_partner";
 
-  // Fetch players for this court
+  // Fetch players for this court (scoped to session)
   const { data: players = [], isLoading: playersLoading } = useQuery({
-    queryKey: ["players", courtNumber],
+    queryKey: ["players", courtNumber, activeSessionId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("players")
         .select("*")
         .eq("court_id", courtNumber)
+        .eq("session_id", activeSessionId!)
         .order("created_at", { ascending: true });
       if (error) throw error;
       return data;
     },
+    enabled: !!activeSessionId,
   });
 
   // Fetch matches for this court
