@@ -11,6 +11,7 @@ interface FeedbackModalProps {
   onOpenChange: (open: boolean) => void;
   courtId: number;
   playerId: string;
+  groupId?: string;
   onSubmitted: () => void;
 }
 
