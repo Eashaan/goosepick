@@ -106,7 +106,7 @@ const AdminCourt = () => {
   const { isAdmin, isLoading: authLoading } = useAdminAuth();
   const { isValidating } = useCourtContextGuard(courtNumber);
   const { selectedCityId, selectedLocationId, scopeEventType } = useEventContext();
-  const { activeSession } = useActiveSession();
+  const { activeSession, sessionId: activeSessionId } = useActiveSession();
 
   const [newPlayerName, setNewPlayerName] = useState("");
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
