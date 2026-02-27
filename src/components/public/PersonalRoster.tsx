@@ -22,9 +22,10 @@ interface PersonalRosterProps {
   matches: Match[];
   courtState: CourtState | undefined;
   courtsInGroup?: number;
+  groupId?: string;
 }
 
-const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup = 1 }: PersonalRosterProps) => {
+const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup = 1, groupId }: PersonalRosterProps) => {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [statsOpen, setStatsOpen] = useState(true);
   const [showStatsCard, setShowStatsCard] = useState(false);
@@ -416,6 +417,7 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
         onOpenChange={setShowFeedback}
         courtId={courtId}
         playerId={selectedPlayerId}
+        groupId={groupId}
         onSubmitted={() => {
           setFeedbackSubmitted(true);
           localStorage.setItem(`gp_feedback_${courtId}_${selectedPlayerId}`, "true");

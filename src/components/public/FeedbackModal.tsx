@@ -11,6 +11,7 @@ interface FeedbackModalProps {
   onOpenChange: (open: boolean) => void;
   courtId: number;
   playerId: string;
+  groupId?: string;
   onSubmitted: () => void;
 }
 
@@ -19,6 +20,7 @@ const FeedbackModal = ({
   onOpenChange,
   courtId,
   playerId,
+  groupId,
   onSubmitted,
 }: FeedbackModalProps) => {
   const [rating, setRating] = useState<"loved" | "good" | "okay" | null>(null);
@@ -47,6 +49,7 @@ const FeedbackModal = ({
           player_id: playerId,
           rating,
           note: trimmedNote || null,
+          group_id: groupId || null,
         },
       });
 
