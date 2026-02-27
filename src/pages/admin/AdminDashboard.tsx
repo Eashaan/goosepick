@@ -111,13 +111,14 @@ const AdminDashboard = () => {
 
   // Fetch fairness scores
   const { data: fairnessScores = new Map<number, number>() } = useQuery({
-    queryKey: ["rotation_audit_scores", linkedCourtIds.join(",")],
+    queryKey: ["rotation_audit_scores", linkedCourtIds.join(","), currentSessionId],
     queryFn: async () => {
-      if (linkedCourtIds.length === 0) return new Map<number, number>();
+      if (linkedCourtIds.length === 0 || !currentSessionId) return new Map<number, number>();
       const { data, error } = await supabase
         .from("rotation_audit" as any)
         .select("court_id, fairness_score")
-        .in("court_id", linkedCourtIds);
+        .in("court_id", linkedCourtIds)
+        .eq("session_id", currentSessionId);
       if (error) return new Map<number, number>();
       const scores = new Map<number, number>();
       (data || []).forEach((r: any) => scores.set(r.court_id, Number(r.fairness_score)));
