@@ -28,18 +28,35 @@ const PublicGroup = () => {
     }
   }, [contextLoading, isContextValid, navigate]);
 
-  // Fetch group details — validate it belongs to active session
+  // Fetch group details — resolve to the correct group for the active session
   const { data: group, isLoading: groupLoading } = useQuery({
     queryKey: ["court_group", groupId, sessionId],
     queryFn: async () => {
-      let query = supabase
+      // First fetch the group by URL param
+      const { data: urlGroup, error } = await supabase
         .from("court_groups")
         .select("*")
-        .eq("id", groupId!);
-      // Scope: group must belong to current session OR have no session
-      const { data, error } = await query.maybeSingle();
+        .eq("id", groupId!)
+        .maybeSingle();
       if (error) throw error;
-      return data;
+      if (!urlGroup) return null;
+
+      // If this group already belongs to the live session, use it directly
+      if (!sessionId || urlGroup.session_id === sessionId) return urlGroup;
+
+      // Otherwise, find the equivalent group for the live session
+      // (same session_config_id, same court_ids pattern)
+      const { data: liveGroup } = await supabase
+        .from("court_groups")
+        .select("*")
+        .eq("session_config_id", urlGroup.session_config_id)
+        .eq("session_id", sessionId);
+
+      // Match by court_ids content
+      const match = liveGroup?.find(
+        (g: any) => JSON.stringify(g.court_ids?.sort()) === JSON.stringify(urlGroup.court_ids?.sort())
+      );
+      return match || urlGroup; // Fallback to original if no live equivalent
     },
     enabled: !!groupId && isContextValid && !sessionLoading,
   });
