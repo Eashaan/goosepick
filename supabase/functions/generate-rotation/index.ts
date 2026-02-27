@@ -154,7 +154,7 @@ serve(async (req) => {
       );
     }
 
-    const { courtId } = await req.json();
+    const { courtId, sessionId } = await req.json();
     
     if (!courtId) {
       return new Response(
@@ -165,48 +165,27 @@ serve(async (req) => {
 
     const supabase = serviceSupabase;
 
-    // Fetch players for this court (ordered by created_at for deterministic labeling)
-    const { data: players, error: playersError } = await supabase
+    // Resolve session_id: use passed sessionId, fallback to courts.session_id
+    let resolvedSessionId = sessionId || null;
+    if (!resolvedSessionId) {
+      const { data: courtForSession } = await supabase
+        .from("courts")
+        .select("session_id")
+        .eq("id", courtId)
+        .maybeSingle();
+      resolvedSessionId = courtForSession?.session_id || null;
+    }
+
+    // Fetch players for this court scoped to session
+    let playersQuery = supabase
       .from("players")
       .select("id, name")
       .eq("court_id", courtId)
       .order("created_at", { ascending: true });
-
-    if (playersError) {
-      console.error("Database error fetching players:", playersError);
-      return new Response(
-        JSON.stringify({ ok: false, error: "Failed to fetch players" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (resolvedSessionId) {
+      playersQuery = playersQuery.eq("session_id", resolvedSessionId);
     }
-    
-    const n = players?.length || 0;
-    if (n < 8 || n > 12) {
-      return new Response(
-        JSON.stringify({ ok: false, error: `Invalid player count: ${n}. Must be 8-12 players.` }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Generate rotation using template-based approach for N=9,10,11
-    // Fall back to heuristic for N=8,12
-    const result = generateRotation(players, n);
-    
-    console.log("Generation result:", JSON.stringify({
-      mode: result.generation_mode,
-      diagnostics: result.diagnostics
-    }));
-
-    // Delete existing matches for this court
-    await supabase.from("matches").delete().eq("court_id", courtId);
-
-    // Get session_id from court for linking
-    const { data: courtForSession } = await supabase
-      .from("courts")
-      .select("session_id")
-      .eq("id", courtId)
-      .maybeSingle();
-    const sessionId = courtForSession?.session_id || null;
+    const { data: players, error: playersError } = await playersQuery;
 
     // Insert new matches
     const matchInserts = result.matches.map((match, index) => ({
