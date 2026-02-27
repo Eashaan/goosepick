@@ -349,6 +349,7 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
           players={players}
           courtState={courtState}
           selectedPlayerId={selectedPlayerId}
+          isGroupMode={courtsInGroup > 1}
         />
       )}
 

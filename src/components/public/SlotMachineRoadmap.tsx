@@ -158,7 +158,7 @@ const SlotMachineRoadmap = ({
                     />
                     {isCenter && item.matchesUntilNext && (
                       <p className="text-xs text-muted-foreground mt-2">
-                        Your next tie is after {item.matchesUntilNext} match{item.matchesUntilNext !== 1 ? "es" : ""}
+                        Your next tie is after {item.matchesUntilNext} {isGroupMode ? "round" : "match"}{item.matchesUntilNext !== 1 ? "s" : ""}
                       </p>
                     )}
                     <div className="w-0.5 h-6 bg-border" />

@@ -224,6 +224,7 @@ const PublicGroup = () => {
               players={players}
               matches={matches}
               courtState={syntheticCourtState}
+              courtsInGroup={group?.court_ids?.length || 1}
             />
           </TabsContent>
 
