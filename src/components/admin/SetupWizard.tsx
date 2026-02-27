@@ -271,8 +271,10 @@ const SetupWizard = ({
         }
       }
 
-      // 4. Insert court_groups (legacy, kept for backward compat)
-      for (const g of groups) {
+      // 4. Insert court_groups and collect their IDs for linking to court_units
+      const groupIdMap = new Map<number, string>(); // group index -> court_groups.id
+      for (let gi = 0; gi < groups.length; gi++) {
+        const g = groups[gi];
         const courtIds: number[] = [];
         for (const n of g.courtNumbers) {
           const { data: c } = await supabase
@@ -284,12 +286,14 @@ const SetupWizard = ({
           if (c) courtIds.push(c.id);
         }
 
-        await supabase.from("court_groups" as any).insert({
+        const { data: insertedGroup, error: groupError } = await supabase.from("court_groups" as any).insert({
           session_config_id: configId,
           court_ids: courtIds,
           format_type: g.formatType,
           session_id: activeSessionId,
-        } as any);
+        } as any).select("id").single();
+        if (groupError) throw groupError;
+        groupIdMap.set(gi, (insertedGroup as any).id);
       }
 
       // 5. Upsert court_units for this scope
@@ -359,8 +363,9 @@ const SetupWizard = ({
         }
       }
 
-      // Insert court_units for groups
-      for (const g of groups) {
+      // Insert court_units for groups (with court_group_id link)
+      for (let gi = 0; gi < groups.length; gi++) {
+        const g = groups[gi];
         const nums = g.courtNumbers;
         let displayName: string;
         if (nums.length === 2) {
@@ -379,6 +384,7 @@ const SetupWizard = ({
           group_court_numbers: nums,
           display_name: displayName,
           format_type: g.formatType,
+          court_group_id: groupIdMap.get(gi) || null,
         } as any);
       }
 

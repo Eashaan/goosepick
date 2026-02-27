@@ -31,6 +31,7 @@ interface CourtUnit {
   format_type: string;
   is_locked: boolean;
   court_id: number | null;
+  court_group_id: string | null;
 }
 
 // ── Render item shared between Admin + Public ──────────
@@ -43,6 +44,7 @@ export interface RenderItem {
   unitId?: string;          // court_unit id
   courtId?: number | null;  // linked courts.id
   formatType?: string;
+  courtGroupId?: string | null; // direct link to court_groups.id
 }
 
 // ── Pure computation (shared logic) ────────────────────
@@ -122,6 +124,7 @@ export function computeRenderItems(
       type: "group",
       courtNumbers: g.validNumbers,
       unitId: g.id,
+      courtGroupId: g.court_group_id || null,
     });
   });
 
