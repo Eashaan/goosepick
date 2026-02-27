@@ -21,6 +21,7 @@ const SlotMachineRoadmap = ({
   players,
   courtState,
   selectedPlayerId,
+  isGroupMode = false,
 }: SlotMachineRoadmapProps) => {
   const currentMatchIndex = courtState?.current_match_index || 0;
 
