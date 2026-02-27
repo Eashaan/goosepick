@@ -129,7 +129,7 @@ const SlotMachineRoadmap = ({
                   >
                     <div className="text-center">
                       <p className="text-xs uppercase tracking-wide opacity-70 mb-1">
-                        Match {item.match!.match_index + 1}
+                        {isGroupMode ? "Round" : "Match"} {item.match!.match_index + 1}
                       </p>
                       <p className="font-semibold">
                         with {getPartner(item.match!)}
