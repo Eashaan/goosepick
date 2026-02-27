@@ -139,7 +139,7 @@ const StatsCardModal = ({
               <h2 className="text-xs font-semibold text-[#FF4200] mb-0.5">
                 India's Most Happening Pickleball Experience
               </h2>
-              <p className="text-[10px] text-gray-400">February 1, 2026</p>
+              <p className="text-[10px] text-gray-400">{format(new Date(), "MMMM d, yyyy")}</p>
             </div>
 
             {/* Player Name Title */}
