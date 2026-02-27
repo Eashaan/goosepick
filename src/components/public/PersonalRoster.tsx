@@ -417,6 +417,7 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
         onOpenChange={setShowFeedback}
         courtId={courtId}
         playerId={selectedPlayerId}
+        groupId={groupId}
         onSubmitted={() => {
           setFeedbackSubmitted(true);
           localStorage.setItem(`gp_feedback_${courtId}_${selectedPlayerId}`, "true");
