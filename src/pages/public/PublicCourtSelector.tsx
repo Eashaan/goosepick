@@ -22,22 +22,20 @@ const PublicCourtSelector = () => {
   const { renderItems, configLoading, sessionConfig } = useScopedCourts();
   const { isEnded, activeSession, sessionLoading } = useActiveSession();
 
-  // Fetch court_groups for the current session to resolve group IDs
+  // Fetch court_groups for the current session to resolve group IDs (strict session_id)
   const { data: courtGroups = [] } = useQuery({
     queryKey: ["court_groups_public", sessionConfig?.id, activeSession?.id],
     queryFn: async () => {
-      let query = supabase
+      const query = supabase
         .from("court_groups")
         .select("id, court_ids, session_id")
-        .eq("session_config_id", sessionConfig!.id);
-      if (activeSession?.id) {
-        query = query.eq("session_id", activeSession.id);
-      }
+        .eq("session_config_id", sessionConfig!.id)
+        .eq("session_id", activeSession!.id);
       const { data, error } = await query;
       if (error) throw error;
       return data || [];
     },
-    enabled: !!sessionConfig?.id,
+    enabled: !!sessionConfig?.id && !!activeSession?.id,
   });
 
   useEffect(() => {
@@ -96,7 +94,7 @@ const PublicCourtSelector = () => {
                   const matchingGroup = courtGroups.find(cg => {
                     const cgNums = [...(cg.court_ids || [])].sort((a, b) => a - b);
                     const idsMatch = JSON.stringify(cgNums) === JSON.stringify(itemNums);
-                    return idsMatch && (cg.session_id === currentSessionId || cg.session_id === null);
+                    return idsMatch && cg.session_id === currentSessionId;
                   });
 
                   if (matchingGroup) {

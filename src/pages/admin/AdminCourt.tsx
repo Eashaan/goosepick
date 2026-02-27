@@ -106,7 +106,7 @@ const AdminCourt = () => {
   const { isAdmin, isLoading: authLoading } = useAdminAuth();
   const { isValidating } = useCourtContextGuard(courtNumber);
   const { selectedCityId, selectedLocationId, scopeEventType } = useEventContext();
-  const { activeSession } = useActiveSession();
+  const { activeSession, sessionId: activeSessionId } = useActiveSession();
 
   const [newPlayerName, setNewPlayerName] = useState("");
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
@@ -150,46 +150,52 @@ const AdminCourt = () => {
   const currentFormat: FormatType = (courtDetails?.format_type as FormatType) || "mystery_partner";
   const isFormatEnabled = currentFormat === "mystery_partner";
 
-  // Fetch players for this court
+  // Fetch players for this court (scoped to session)
   const { data: players = [], isLoading: playersLoading } = useQuery({
-    queryKey: ["players", courtNumber],
+    queryKey: ["players", courtNumber, activeSessionId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("players")
         .select("*")
         .eq("court_id", courtNumber)
+        .eq("session_id", activeSessionId!)
         .order("created_at", { ascending: true });
       if (error) throw error;
       return data;
     },
+    enabled: !!activeSessionId,
   });
 
-  // Fetch matches for this court
+  // Fetch matches for this court (scoped to session)
   const { data: matches = [] } = useQuery({
-    queryKey: ["matches", courtNumber],
+    queryKey: ["matches", courtNumber, activeSessionId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("matches")
         .select("*")
         .eq("court_id", courtNumber)
+        .eq("session_id", activeSessionId!)
         .order("match_index", { ascending: true });
       if (error) throw error;
       return data;
     },
+    enabled: !!activeSessionId,
   });
 
   // Fetch court state
   const { data: courtState } = useQuery({
-    queryKey: ["court_state", courtNumber],
+    queryKey: ["court_state", courtNumber, activeSessionId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("court_state")
         .select("*")
         .eq("court_id", courtNumber)
-        .single();
+        .eq("session_id", activeSessionId!)
+        .maybeSingle();
       if (error) throw error;
       return data;
     },
+    enabled: !!activeSessionId,
   });
 
   // Set up realtime subscriptions
@@ -223,7 +229,7 @@ const AdminCourt = () => {
     mutationFn: async (name: string) => {
       const { error } = await supabase
         .from("players")
-        .insert({ court_id: courtNumber, name: name.trim() });
+        .insert({ court_id: courtNumber, name: name.trim(), session_id: activeSessionId });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -282,7 +288,7 @@ const AdminCourt = () => {
   const generateRotation = useMutation({
     mutationFn: async (): Promise<RotationResult> => {
       const { data, error } = await supabase.functions.invoke("generate-rotation", {
-        body: { courtId: courtNumber },
+        body: { courtId: courtNumber, sessionId: activeSessionId },
       });
       if (error) throw error;
       return data as RotationResult;

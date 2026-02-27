@@ -11,56 +11,61 @@ import CourtPulse from "@/components/public/CourtPulse";
 import PersonalRoster from "@/components/public/PersonalRoster";
 import Leaderboard from "@/components/public/Leaderboard";
 import { useCourtContextGuard } from "@/hooks/useCourtContextGuard";
+import { useActiveSession } from "@/hooks/useActiveSession";
 
 const PublicCourt = () => {
   const { courtId } = useParams();
   const courtNumber = parseInt(courtId || "1");
   const queryClient = useQueryClient();
   const { isValidating } = useCourtContextGuard(courtNumber);
+  const { sessionId: activeSessionId } = useActiveSession();
 
-  // Fetch players
+  // Fetch players (scoped to session)
   const { data: players = [] } = useQuery({
-    queryKey: ["players", courtNumber],
+    queryKey: ["players", courtNumber, activeSessionId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("players")
         .select("*")
         .eq("court_id", courtNumber)
+        .eq("session_id", activeSessionId!)
         .order("created_at", { ascending: true });
       if (error) throw error;
       return data;
     },
-    enabled: !isValidating,
+    enabled: !isValidating && !!activeSessionId,
   });
 
-  // Fetch matches
+  // Fetch matches (scoped to session)
   const { data: matches = [] } = useQuery({
-    queryKey: ["matches", courtNumber],
+    queryKey: ["matches", courtNumber, activeSessionId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("matches")
         .select("*")
         .eq("court_id", courtNumber)
+        .eq("session_id", activeSessionId!)
         .order("match_index", { ascending: true });
       if (error) throw error;
       return data;
     },
-    enabled: !isValidating,
+    enabled: !isValidating && !!activeSessionId,
   });
 
-  // Fetch court state
+  // Fetch court state (scoped to session)
   const { data: courtState } = useQuery({
-    queryKey: ["court_state", courtNumber],
+    queryKey: ["court_state", courtNumber, activeSessionId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("court_state")
         .select("*")
         .eq("court_id", courtNumber)
+        .eq("session_id", activeSessionId!)
         .maybeSingle();
       if (error) throw error;
       return data;
     },
-    enabled: !isValidating,
+    enabled: !isValidating && !!activeSessionId,
   });
 
   // Fetch court details for display name
@@ -82,31 +87,31 @@ const PublicCourt = () => {
 
   // Set up realtime subscriptions
   useEffect(() => {
-    if (isValidating) return;
+    if (isValidating || !activeSessionId) return;
 
     const channel = supabase
-      .channel(`court-${courtNumber}`)
+      .channel(`court-${courtNumber}-${activeSessionId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "court_state", filter: `court_id=eq.${courtNumber}` },
-        () => queryClient.invalidateQueries({ queryKey: ["court_state", courtNumber] })
+        () => queryClient.invalidateQueries({ queryKey: ["court_state", courtNumber, activeSessionId] })
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "matches", filter: `court_id=eq.${courtNumber}` },
-        () => queryClient.invalidateQueries({ queryKey: ["matches", courtNumber] })
+        () => queryClient.invalidateQueries({ queryKey: ["matches", courtNumber, activeSessionId] })
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "players", filter: `court_id=eq.${courtNumber}` },
-        () => queryClient.invalidateQueries({ queryKey: ["players", courtNumber] })
+        () => queryClient.invalidateQueries({ queryKey: ["players", courtNumber, activeSessionId] })
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [courtNumber, queryClient, isValidating]);
+  }, [courtNumber, queryClient, isValidating, activeSessionId]);
 
   if (isValidating) {
     return (
