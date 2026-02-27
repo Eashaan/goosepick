@@ -229,7 +229,7 @@ const AdminCourt = () => {
     mutationFn: async (name: string) => {
       const { error } = await supabase
         .from("players")
-        .insert({ court_id: courtNumber, name: name.trim() });
+        .insert({ court_id: courtNumber, name: name.trim(), session_id: activeSessionId });
       if (error) throw error;
     },
     onSuccess: () => {
