@@ -44,6 +44,7 @@ export interface RenderItem {
   unitId?: string;          // court_unit id
   courtId?: number | null;  // linked courts.id
   formatType?: string;
+  courtGroupId?: string | null; // direct link to court_groups.id
 }
 
 // ── Pure computation (shared logic) ────────────────────
