@@ -71,6 +71,7 @@ const AdminDashboard = () => {
   };
 
   // ── Linked court IDs for status queries ──
+  const currentSessionId = activeSession?.id || null;
   const linkedCourtIds = courtUnits
     .filter((u: any) => u.court_id != null)
     .map((u: any) => u.court_id!);
