@@ -166,18 +166,20 @@ const AdminCourt = () => {
     enabled: !!activeSessionId,
   });
 
-  // Fetch matches for this court
+  // Fetch matches for this court (scoped to session)
   const { data: matches = [] } = useQuery({
-    queryKey: ["matches", courtNumber],
+    queryKey: ["matches", courtNumber, activeSessionId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("matches")
         .select("*")
         .eq("court_id", courtNumber)
+        .eq("session_id", activeSessionId!)
         .order("match_index", { ascending: true });
       if (error) throw error;
       return data;
     },
+    enabled: !!activeSessionId,
   });
 
   // Fetch court state
