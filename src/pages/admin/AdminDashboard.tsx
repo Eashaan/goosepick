@@ -93,13 +93,14 @@ const AdminDashboard = () => {
 
   // Fetch match counts
   const { data: courtMatchCounts = new Map<number, number>() } = useQuery({
-    queryKey: ["court_match_counts", linkedCourtIds.join(",")],
+    queryKey: ["court_match_counts", linkedCourtIds.join(","), currentSessionId],
     queryFn: async () => {
-      if (linkedCourtIds.length === 0) return new Map<number, number>();
+      if (linkedCourtIds.length === 0 || !currentSessionId) return new Map<number, number>();
       const { data, error } = await supabase
         .from("matches")
         .select("court_id")
-        .in("court_id", linkedCourtIds);
+        .in("court_id", linkedCourtIds)
+        .eq("session_id", currentSessionId);
       if (error) return new Map<number, number>();
       const counts = new Map<number, number>();
       (data || []).forEach((m) => counts.set(m.court_id, (counts.get(m.court_id) || 0) + 1));
