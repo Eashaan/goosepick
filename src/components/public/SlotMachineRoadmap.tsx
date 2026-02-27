@@ -12,6 +12,7 @@ interface SlotMachineRoadmapProps {
   players: Player[];
   courtState: CourtState | undefined;
   selectedPlayerId: string;
+  isGroupMode?: boolean;
 }
 
 const SlotMachineRoadmap = ({
