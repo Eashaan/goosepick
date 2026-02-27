@@ -77,13 +77,14 @@ const AdminDashboard = () => {
 
   // Fetch court_state
   const { data: courtStates = [] } = useQuery({
-    queryKey: ["court_states_dashboard", linkedCourtIds.join(",")],
+    queryKey: ["court_states_dashboard", linkedCourtIds.join(","), currentSessionId],
     queryFn: async () => {
-      if (linkedCourtIds.length === 0) return [];
+      if (linkedCourtIds.length === 0 || !currentSessionId) return [];
       const { data, error } = await supabase
         .from("court_state")
         .select("court_id, phase")
-        .in("court_id", linkedCourtIds);
+        .in("court_id", linkedCourtIds)
+        .eq("session_id", currentSessionId);
       if (error) return [];
       return (data || []) as { court_id: number; phase: "idle" | "in_progress" | "completed" }[];
     },
