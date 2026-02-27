@@ -11,26 +11,29 @@ import CourtPulse from "@/components/public/CourtPulse";
 import PersonalRoster from "@/components/public/PersonalRoster";
 import Leaderboard from "@/components/public/Leaderboard";
 import { useCourtContextGuard } from "@/hooks/useCourtContextGuard";
+import { useActiveSession } from "@/hooks/useActiveSession";
 
 const PublicCourt = () => {
   const { courtId } = useParams();
   const courtNumber = parseInt(courtId || "1");
   const queryClient = useQueryClient();
   const { isValidating } = useCourtContextGuard(courtNumber);
+  const { sessionId: activeSessionId } = useActiveSession();
 
-  // Fetch players
+  // Fetch players (scoped to session)
   const { data: players = [] } = useQuery({
-    queryKey: ["players", courtNumber],
+    queryKey: ["players", courtNumber, activeSessionId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("players")
         .select("*")
         .eq("court_id", courtNumber)
+        .eq("session_id", activeSessionId!)
         .order("created_at", { ascending: true });
       if (error) throw error;
       return data;
     },
-    enabled: !isValidating,
+    enabled: !isValidating && !!activeSessionId,
   });
 
   // Fetch matches
