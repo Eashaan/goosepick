@@ -124,6 +124,7 @@ export function computeRenderItems(
       type: "group",
       courtNumbers: g.validNumbers,
       unitId: g.id,
+      courtGroupId: g.court_group_id || null,
     });
   });
 

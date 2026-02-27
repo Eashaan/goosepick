@@ -363,8 +363,9 @@ const SetupWizard = ({
         }
       }
 
-      // Insert court_units for groups
-      for (const g of groups) {
+      // Insert court_units for groups (with court_group_id link)
+      for (let gi = 0; gi < groups.length; gi++) {
+        const g = groups[gi];
         const nums = g.courtNumbers;
         let displayName: string;
         if (nums.length === 2) {
@@ -383,6 +384,7 @@ const SetupWizard = ({
           group_court_numbers: nums,
           display_name: displayName,
           format_type: g.formatType,
+          court_group_id: groupIdMap.get(gi) || null,
         } as any);
       }
 

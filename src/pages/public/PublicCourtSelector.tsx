@@ -70,16 +70,7 @@ const PublicCourtSelector = () => {
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
               {renderItems.map((item) => {
                 if (item.type === "group") {
-                  // Find the court_group record matching this unit's court numbers + current session
-                  const currentSessionId = activeSession?.id || null;
-                  const itemNums = [...(item.courtNumbers || [])].sort((a, b) => a - b);
-                  const matchingGroup = courtGroups.find(cg => {
-                    const cgNums = [...(cg.court_ids || [])].sort((a, b) => a - b);
-                    const idsMatch = JSON.stringify(cgNums) === JSON.stringify(itemNums);
-                    return idsMatch && cg.session_id === currentSessionId;
-                  });
-
-                  if (matchingGroup) {
+                  if (item.courtGroupId) {
                     return (
                       <Button
                         key={item.key}
@@ -87,7 +78,7 @@ const PublicCourtSelector = () => {
                         variant="secondary"
                         className="h-24 text-base font-semibold rounded-2xl hover:bg-primary hover:text-primary-foreground transition-all duration-200 flex flex-col items-center justify-center gap-1"
                       >
-                        <Link to={`/public/group/${matchingGroup.id}`}>
+                        <Link to={`/public/group/${item.courtGroupId}`}>
                           <span>{item.label}</span>
                         </Link>
                       </Button>
