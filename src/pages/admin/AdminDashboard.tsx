@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, Settings } from "lucide-react";
+import AdminManagement from "@/components/admin/AdminManagement";
 import { toast } from "sonner";
 import PageLayout from "@/components/layout/PageLayout";
 import GlobalHeader from "@/components/layout/GlobalHeader";
@@ -70,19 +71,21 @@ const AdminDashboard = () => {
   };
 
   // ── Linked court IDs for status queries ──
+  const currentSessionId = activeSession?.id || null;
   const linkedCourtIds = courtUnits
     .filter((u: any) => u.court_id != null)
     .map((u: any) => u.court_id!);
 
   // Fetch court_state
   const { data: courtStates = [] } = useQuery({
-    queryKey: ["court_states_dashboard", linkedCourtIds.join(",")],
+    queryKey: ["court_states_dashboard", linkedCourtIds.join(","), currentSessionId],
     queryFn: async () => {
-      if (linkedCourtIds.length === 0) return [];
+      if (linkedCourtIds.length === 0 || !currentSessionId) return [];
       const { data, error } = await supabase
         .from("court_state")
         .select("court_id, phase")
-        .in("court_id", linkedCourtIds);
+        .in("court_id", linkedCourtIds)
+        .eq("session_id", currentSessionId);
       if (error) return [];
       return (data || []) as { court_id: number; phase: "idle" | "in_progress" | "completed" }[];
     },
@@ -91,13 +94,14 @@ const AdminDashboard = () => {
 
   // Fetch match counts
   const { data: courtMatchCounts = new Map<number, number>() } = useQuery({
-    queryKey: ["court_match_counts", linkedCourtIds.join(",")],
+    queryKey: ["court_match_counts", linkedCourtIds.join(","), currentSessionId],
     queryFn: async () => {
-      if (linkedCourtIds.length === 0) return new Map<number, number>();
+      if (linkedCourtIds.length === 0 || !currentSessionId) return new Map<number, number>();
       const { data, error } = await supabase
         .from("matches")
         .select("court_id")
-        .in("court_id", linkedCourtIds);
+        .in("court_id", linkedCourtIds)
+        .eq("session_id", currentSessionId);
       if (error) return new Map<number, number>();
       const counts = new Map<number, number>();
       (data || []).forEach((m) => counts.set(m.court_id, (counts.get(m.court_id) || 0) + 1));
@@ -108,13 +112,14 @@ const AdminDashboard = () => {
 
   // Fetch fairness scores
   const { data: fairnessScores = new Map<number, number>() } = useQuery({
-    queryKey: ["rotation_audit_scores", linkedCourtIds.join(",")],
+    queryKey: ["rotation_audit_scores", linkedCourtIds.join(","), currentSessionId],
     queryFn: async () => {
-      if (linkedCourtIds.length === 0) return new Map<number, number>();
+      if (linkedCourtIds.length === 0 || !currentSessionId) return new Map<number, number>();
       const { data, error } = await supabase
         .from("rotation_audit" as any)
         .select("court_id, fairness_score")
-        .in("court_id", linkedCourtIds);
+        .in("court_id", linkedCourtIds)
+        .eq("session_id", currentSessionId);
       if (error) return new Map<number, number>();
       const scores = new Map<number, number>();
       (data || []).forEach((r: any) => scores.set(r.court_id, Number(r.fairness_score)));
@@ -124,7 +129,6 @@ const AdminDashboard = () => {
   });
 
   // Fetch group-level status data (players + matches per group for this session)
-  const currentSessionId = activeSession?.id || null;
   const { data: groupStatusMap = new Map<string, { playerCount: number; matchCount: number; hasLive: boolean }>() } = useQuery({
     queryKey: ["group_status_dashboard", sessionConfig?.id, currentSessionId],
     queryFn: async () => {
@@ -331,6 +335,7 @@ const AdminDashboard = () => {
                 <p className="text-xs text-muted-foreground">Signed in as {user.email}</p>
               )}
             </div>
+            {user && <AdminManagement currentUserId={user.id} />}
             {setupCompleted && !showEditSetup && (
               <Button variant="ghost" size="icon" onClick={() => setShowEditSetup(true)}>
                 <Settings className="h-5 w-5" />

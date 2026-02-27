@@ -2,8 +2,6 @@ import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import PageLayout from "@/components/layout/PageLayout";
 import GlobalHeader from "@/components/layout/GlobalHeader";
 import { useEventContext } from "@/hooks/useEventContext";
@@ -19,26 +17,8 @@ const PublicCourtSelector = () => {
     clearSelection,
   } = useEventContext();
 
-  const { renderItems, configLoading, sessionConfig } = useScopedCourts();
+  const { renderItems, configLoading } = useScopedCourts();
   const { isEnded, activeSession, sessionLoading } = useActiveSession();
-
-  // Fetch court_groups for the current session to resolve group IDs
-  const { data: courtGroups = [] } = useQuery({
-    queryKey: ["court_groups_public", sessionConfig?.id, activeSession?.id],
-    queryFn: async () => {
-      let query = supabase
-        .from("court_groups")
-        .select("id, court_ids, session_id")
-        .eq("session_config_id", sessionConfig!.id);
-      if (activeSession?.id) {
-        query = query.eq("session_id", activeSession.id);
-      }
-      const { data, error } = await query;
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!sessionConfig?.id,
-  });
 
   useEffect(() => {
     if (!isContextValid) {
@@ -90,16 +70,7 @@ const PublicCourtSelector = () => {
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
               {renderItems.map((item) => {
                 if (item.type === "group") {
-                  // Find the court_group record matching this unit's court numbers + current session
-                  const currentSessionId = activeSession?.id || null;
-                  const itemNums = [...(item.courtNumbers || [])].sort((a, b) => a - b);
-                  const matchingGroup = courtGroups.find(cg => {
-                    const cgNums = [...(cg.court_ids || [])].sort((a, b) => a - b);
-                    const idsMatch = JSON.stringify(cgNums) === JSON.stringify(itemNums);
-                    return idsMatch && (cg.session_id === currentSessionId || cg.session_id === null);
-                  });
-
-                  if (matchingGroup) {
+                  if (item.courtGroupId) {
                     return (
                       <Button
                         key={item.key}
@@ -107,7 +78,7 @@ const PublicCourtSelector = () => {
                         variant="secondary"
                         className="h-24 text-base font-semibold rounded-2xl hover:bg-primary hover:text-primary-foreground transition-all duration-200 flex flex-col items-center justify-center gap-1"
                       >
-                        <Link to={`/public/group/${matchingGroup.id}`}>
+                        <Link to={`/public/group/${item.courtGroupId}`}>
                           <span>{item.label}</span>
                         </Link>
                       </Button>
