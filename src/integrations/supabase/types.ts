@@ -134,6 +134,7 @@ export type Database = {
       court_units: {
         Row: {
           city_id: string
+          court_group_id: string | null
           court_id: number | null
           court_number: number | null
           created_at: string
@@ -149,6 +150,7 @@ export type Database = {
         }
         Insert: {
           city_id: string
+          court_group_id?: string | null
           court_id?: number | null
           court_number?: number | null
           created_at?: string
@@ -164,6 +166,7 @@ export type Database = {
         }
         Update: {
           city_id?: string
+          court_group_id?: string | null
           court_id?: number | null
           court_number?: number | null
           created_at?: string
@@ -183,6 +186,13 @@ export type Database = {
             columns: ["city_id"]
             isOneToOne: false
             referencedRelation: "cities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "court_units_court_group_id_fkey"
+            columns: ["court_group_id"]
+            isOneToOne: false
+            referencedRelation: "court_groups"
             referencedColumns: ["id"]
           },
           {
