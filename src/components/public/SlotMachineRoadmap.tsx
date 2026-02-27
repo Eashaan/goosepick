@@ -12,6 +12,7 @@ interface SlotMachineRoadmapProps {
   players: Player[];
   courtState: CourtState | undefined;
   selectedPlayerId: string;
+  isGroupMode?: boolean;
 }
 
 const SlotMachineRoadmap = ({
@@ -20,6 +21,7 @@ const SlotMachineRoadmap = ({
   players,
   courtState,
   selectedPlayerId,
+  isGroupMode = false,
 }: SlotMachineRoadmapProps) => {
   const currentMatchIndex = courtState?.current_match_index || 0;
 
@@ -127,7 +129,7 @@ const SlotMachineRoadmap = ({
                   >
                     <div className="text-center">
                       <p className="text-xs uppercase tracking-wide opacity-70 mb-1">
-                        Match {item.match!.match_index + 1}
+                        {isGroupMode ? "Round" : "Match"} {item.match!.match_index + 1}
                       </p>
                       <p className="font-semibold">
                         with {getPartner(item.match!)}
@@ -156,7 +158,7 @@ const SlotMachineRoadmap = ({
                     />
                     {isCenter && item.matchesUntilNext && (
                       <p className="text-xs text-muted-foreground mt-2">
-                        Your next tie is after {item.matchesUntilNext} match{item.matchesUntilNext !== 1 ? "es" : ""}
+                        Your next tie is after {item.matchesUntilNext} {isGroupMode ? "round" : "match"}{item.matchesUntilNext !== 1 ? "s" : ""}
                       </p>
                     )}
                     <div className="w-0.5 h-6 bg-border" />
