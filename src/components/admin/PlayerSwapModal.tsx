@@ -46,6 +46,7 @@ interface PlayerSwapModalProps {
   allPlayers: Player[];
   matchPlayerIds: (string | null)[];
   groupId?: string;
+  sessionId?: string;
   // Legacy single-player mode (used by AdminCourt)
   playerSlot?: PlayerSlot;
   currentPlayerId?: string;
