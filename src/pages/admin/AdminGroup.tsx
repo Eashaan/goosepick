@@ -22,7 +22,7 @@ import { Database } from "@/integrations/supabase/types";
 
 type FormatType = Database["public"]["Enums"]["format_type"];
 type Match = Database["public"]["Tables"]["matches"]["Row"];
-type PlayerSlot = "team1_player1_id" | "team1_player2_id" | "team2_player1_id" | "team2_player2_id";
+type PlayerSlot = "team1_player1_id" | "team1_player2_id" | "team2_player1_id" | "team2_player2_id"; // used by PlayerSwapModal
 
 interface GroupCourtState {
   id: string;
