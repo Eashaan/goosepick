@@ -871,23 +871,31 @@ const AdminGroup = () => {
       </div>
 
       {/* Swap modal */}
-      {swapTarget && (
-        <PlayerSwapModal
-          open={swapModalOpen}
-          onOpenChange={setSwapModalOpen}
-          courtId={0}
-          groupId={groupId}
-          matchId={swapTarget.matchId}
-          playerSlot={swapTarget.slot}
-          currentPlayerId={swapTarget.playerId}
-          currentPlayerName={swapTarget.playerName}
-          allPlayers={players as any}
-          matchPlayerIds={(() => {
-            const m = matches.find(m => m.id === swapTarget.matchId);
-            return m ? [m.team1_player1_id, m.team1_player2_id, m.team2_player1_id, m.team2_player2_id] : [];
-          })()}
-        />
-      )}
+      {swapMatchId && (() => {
+        const m = matches.find(m => m.id === swapMatchId);
+        if (!m) return null;
+        const matchPlayers = [
+          { id: m.team1_player1_id!, name: getPlayerName(m.team1_player1_id), slot: "team1_player1_id" as const },
+          { id: m.team1_player2_id!, name: getPlayerName(m.team1_player2_id), slot: "team1_player2_id" as const },
+          { id: m.team2_player1_id!, name: getPlayerName(m.team2_player1_id), slot: "team2_player1_id" as const },
+          { id: m.team2_player2_id!, name: getPlayerName(m.team2_player2_id), slot: "team2_player2_id" as const },
+        ].filter(mp => !!mp.id);
+        return (
+          <PlayerSwapModal
+            open={swapModalOpen}
+            onOpenChange={(open) => {
+              setSwapModalOpen(open);
+              if (!open) setSwapMatchId(null);
+            }}
+            courtId={0}
+            groupId={groupId}
+            matchId={swapMatchId}
+            matchPlayers={matchPlayers}
+            allPlayers={players as any}
+            matchPlayerIds={[m.team1_player1_id, m.team1_player2_id, m.team2_player1_id, m.team2_player2_id]}
+          />
+        );
+      })()}
     </PageLayout>
   );
 };
