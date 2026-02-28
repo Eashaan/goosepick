@@ -663,12 +663,7 @@ const AdminGroup = () => {
                                         <button
                                           className="text-xs text-primary underline ml-auto"
                                           onClick={() => {
-                                            setSwapTarget({
-                                              playerId: displayMatch.team1_player1_id!,
-                                              playerName: getPlayerName(displayMatch.team1_player1_id),
-                                              slot: "team1_player1_id",
-                                              matchId: displayMatch.id,
-                                            });
+                                            setSwapMatchId(displayMatch.id);
                                             setSwapModalOpen(true);
                                           }}
                                         >
