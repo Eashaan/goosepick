@@ -63,6 +63,7 @@ const PlayerSwapModal = ({
   allPlayers,
   matchPlayerIds,
   groupId,
+  sessionId,
   // Legacy props
   playerSlot,
   currentPlayerId,
