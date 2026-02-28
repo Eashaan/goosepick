@@ -104,6 +104,9 @@ const PlayerSwapModal = ({
         is_guest: true,
         added_by_admin: true,
       };
+      if (sessionId) {
+        insertData.session_id = sessionId;
+      }
       if (groupId) {
         insertData.group_id = groupId;
       } else {

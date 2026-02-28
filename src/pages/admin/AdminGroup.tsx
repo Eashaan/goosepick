@@ -889,6 +889,7 @@ const AdminGroup = () => {
             }}
             courtId={0}
             groupId={groupId}
+            sessionId={sessionId}
             matchId={swapMatchId}
             matchPlayers={matchPlayers}
             allPlayers={players as any}
