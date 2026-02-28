@@ -81,12 +81,7 @@ const AdminGroup = () => {
 
   // Swap modal state
   const [swapModalOpen, setSwapModalOpen] = useState(false);
-  const [swapTarget, setSwapTarget] = useState<{
-    playerId: string;
-    playerName: string;
-    slot: PlayerSlot;
-    matchId: string;
-  } | null>(null);
+  const [swapMatchId, setSwapMatchId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !isAdmin) navigate("/admin/login");
