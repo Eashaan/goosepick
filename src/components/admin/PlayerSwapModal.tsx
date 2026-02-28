@@ -46,6 +46,7 @@ interface PlayerSwapModalProps {
   allPlayers: Player[];
   matchPlayerIds: (string | null)[];
   groupId?: string;
+  sessionId?: string;
   // Legacy single-player mode (used by AdminCourt)
   playerSlot?: PlayerSlot;
   currentPlayerId?: string;
@@ -62,6 +63,7 @@ const PlayerSwapModal = ({
   allPlayers,
   matchPlayerIds,
   groupId,
+  sessionId,
   // Legacy props
   playerSlot,
   currentPlayerId,
@@ -102,6 +104,9 @@ const PlayerSwapModal = ({
         is_guest: true,
         added_by_admin: true,
       };
+      if (sessionId) {
+        insertData.session_id = sessionId;
+      }
       if (groupId) {
         insertData.group_id = groupId;
       } else {
