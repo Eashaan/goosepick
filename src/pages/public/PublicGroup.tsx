@@ -168,11 +168,30 @@ const PublicGroup = () => {
     };
   }, [groupId, queryClient, isContextValid, sessionId]);
 
-  // Derive display name from court numbers
+  // Fetch court_units to get display court numbers for this group
+  const { data: groupCourtUnit } = useQuery({
+    queryKey: ["court_unit_for_group", group?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("court_units" as any)
+        .select("group_court_numbers")
+        .eq("court_group_id", group!.id)
+        .maybeSingle();
+      return data as unknown as { group_court_numbers: number[] | null } | null;
+    },
+    enabled: !!group?.id,
+  });
+
+  // Derive display name from court_units group_court_numbers (display numbers), not court_groups.court_ids (DB PKs)
   const groupLabel = useMemo(() => {
-    if (!group?.court_ids || group.court_ids.length === 0) return "Group";
-    return `Courts ${group.court_ids.join(" & ")}`;
-  }, [group?.court_ids]);
+    const nums = groupCourtUnit?.group_court_numbers || group?.court_ids;
+    if (!nums || nums.length === 0) return "Group";
+    if (nums.length === 1) return `Court ${nums[0]}`;
+    if (nums.length === 2) return `Courts ${nums[0]} & ${nums[1]}`;
+    const last = nums[nums.length - 1];
+    const rest = nums.slice(0, -1);
+    return `Courts ${rest.join(", ")} & ${last}`;
+  }, [groupCourtUnit?.group_court_numbers, group?.court_ids]);
 
   if (contextLoading || sessionLoading || groupLoading) {
     return (
