@@ -177,7 +177,7 @@ const PublicGroup = () => {
         .select("group_court_numbers")
         .eq("court_group_id", group!.id)
         .maybeSingle();
-      return data as { group_court_numbers: number[] | null } | null;
+      return data as unknown as { group_court_numbers: number[] | null } | null;
     },
     enabled: !!group?.id,
   });
