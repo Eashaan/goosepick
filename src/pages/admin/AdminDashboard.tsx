@@ -243,52 +243,28 @@ const AdminDashboard = () => {
     }
   };
 
-  // Auto-create court_groups row on group click
+  // Navigate to group — use court_units.court_group_id directly
   const handleGroupClick = async (item: RenderItem) => {
     if (!item.unitId || !item.courtNumbers) return;
     setCreatingGroupId(item.unitId);
     try {
       const currentSessionId = activeSession?.id || null;
-      const sortedNums = [...item.courtNumbers].sort((a, b) => a - b);
 
-      // Find existing group matching session_config + court_ids + current session
-      const { data: allGroups } = await supabase
-        .from("court_groups")
-        .select("id, court_ids, session_id")
-        .eq("session_config_id", sessionConfig?.id || "");
-
-      // Match by court_ids array AND session_id
-      const existing = (allGroups || []).find(g => {
-        const gNums = [...(g.court_ids || [])].sort((a, b) => a - b);
-        const idsMatch = JSON.stringify(gNums) === JSON.stringify(sortedNums);
-        // Prefer group with matching session_id, then null session_id
-        return idsMatch && (g.session_id === currentSessionId || g.session_id === null);
-      });
-
-      // Also check for exact session match (higher priority)
-      const exactSessionMatch = (allGroups || []).find(g => {
-        const gNums = [...(g.court_ids || [])].sort((a, b) => a - b);
-        return JSON.stringify(gNums) === JSON.stringify(sortedNums) && g.session_id === currentSessionId;
-      });
-
-      if (exactSessionMatch) {
-        navigate(`/admin/group/${exactSessionMatch.id}`);
+      // 1. If court_unit already has a linked court_group_id, use it directly
+      if (item.courtGroupId) {
+        // Ensure the group has the current session_id
+        if (currentSessionId) {
+          await supabase
+            .from("court_groups")
+            .update({ session_id: currentSessionId } as any)
+            .eq("id", item.courtGroupId)
+            .is("session_id", null);
+        }
+        navigate(`/admin/group/${item.courtGroupId}`);
         return;
       }
 
-      if (existing && existing.session_id === null && currentSessionId) {
-        // Update existing group with current session_id
-        await supabase.from("court_groups").update({ session_id: currentSessionId } as any).eq("id", existing.id);
-        navigate(`/admin/group/${existing.id}`);
-        return;
-      }
-
-      if (existing) {
-        navigate(`/admin/group/${existing.id}`);
-        return;
-      }
-
-      // Create new court_groups row
+      // 2. No linked group — create a new one and link it back to the court_unit
       const { data, error } = await supabase
         .from("court_groups")
         .insert({
@@ -300,7 +276,16 @@ const AdminDashboard = () => {
         .select("id")
         .single();
       if (error) throw error;
-      navigate(`/admin/group/${(data as any).id}`);
+
+      const newGroupId = (data as any).id;
+
+      // Link the court_unit to the new group
+      await supabase
+        .from("court_units" as any)
+        .update({ court_group_id: newGroupId } as any)
+        .eq("id", item.unitId);
+
+      navigate(`/admin/group/${newGroupId}`);
     } catch (err: any) {
       toast.error("Failed to initialize group: " + err.message);
     } finally {
