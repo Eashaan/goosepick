@@ -52,6 +52,23 @@ export function useActiveSession() {
       const { data: liveData } = await (query as any).maybeSingle();
       if (liveData) return liveData as ActiveSession;
 
+      // Fallback: latest ended (prioritized so Export CSV is available)
+      let endedQuery = supabase
+        .from("sessions" as any)
+        .select("*")
+        .eq("city_id", selectedCityId)
+        .eq("event_type", scopeEventType!)
+        .eq("status", "ended")
+        .order("ended_at", { ascending: false })
+        .limit(1);
+      if (selectedLocationId) {
+        endedQuery = endedQuery.eq("location_id", selectedLocationId);
+      } else {
+        endedQuery = endedQuery.is("location_id", null);
+      }
+      const { data: endedData } = await (endedQuery as any);
+      if (endedData && endedData.length > 0) return endedData[0] as ActiveSession;
+
       // Fallback: latest draft
       let draftQuery = supabase
         .from("sessions" as any)
@@ -68,23 +85,6 @@ export function useActiveSession() {
       }
       const { data: draftData } = await (draftQuery as any);
       if (draftData && draftData.length > 0) return draftData[0] as ActiveSession;
-
-      // Fallback: latest ended
-      let endedQuery = supabase
-        .from("sessions" as any)
-        .select("*")
-        .eq("city_id", selectedCityId)
-        .eq("event_type", scopeEventType!)
-        .eq("status", "ended")
-        .order("ended_at", { ascending: false })
-        .limit(1);
-      if (selectedLocationId) {
-        endedQuery = endedQuery.eq("location_id", selectedLocationId);
-      } else {
-        endedQuery = endedQuery.is("location_id", null);
-      }
-      const { data: endedData } = await (endedQuery as any);
-      if (endedData && endedData.length > 0) return endedData[0] as ActiveSession;
 
       return null;
     },
