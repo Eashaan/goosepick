@@ -101,7 +101,7 @@ const SessionLifecycleControls = ({ setupCompleted }: SessionLifecycleControlsPr
       )}
 
       {/* Start Session */}
-      {(!activeSession || isDraft) && setupCompleted && (
+      {(!activeSession || isDraft || isEnded) && setupCompleted && (
         <Button
           size="sm"
           onClick={() => startSession.mutate()}
