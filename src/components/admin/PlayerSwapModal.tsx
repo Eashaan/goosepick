@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ChevronLeft } from "lucide-react";
 
 interface Player {
   id: string;
@@ -29,17 +30,29 @@ interface Player {
   added_by_admin?: boolean;
 }
 
+type PlayerSlot = "team1_player1_id" | "team1_player2_id" | "team2_player1_id" | "team2_player2_id";
+
+interface MatchPlayer {
+  id: string;
+  name: string;
+  slot: PlayerSlot;
+}
+
 interface PlayerSwapModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   courtId: number;
   matchId: string;
-  playerSlot: "team1_player1_id" | "team1_player2_id" | "team2_player1_id" | "team2_player2_id";
-  currentPlayerId: string;
-  currentPlayerName: string;
   allPlayers: Player[];
   matchPlayerIds: (string | null)[];
   groupId?: string;
+  sessionId?: string;
+  // Legacy single-player mode (used by AdminCourt)
+  playerSlot?: PlayerSlot;
+  currentPlayerId?: string;
+  currentPlayerName?: string;
+  // New multi-player mode (used by AdminGroup)
+  matchPlayers?: MatchPlayer[];
 }
 
 const PlayerSwapModal = ({
@@ -47,43 +60,53 @@ const PlayerSwapModal = ({
   onOpenChange,
   courtId,
   matchId,
-  playerSlot,
-  currentPlayerId,
-  currentPlayerName,
   allPlayers,
   matchPlayerIds,
   groupId,
+  sessionId,
+  // Legacy props
+  playerSlot,
+  currentPlayerId,
+  currentPlayerName,
+  // New props
+  matchPlayers,
 }: PlayerSwapModalProps) => {
   const queryClient = useQueryClient();
   const [selectedTab, setSelectedTab] = useState<"existing" | "guest">("existing");
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
   const [guestName, setGuestName] = useState("");
+  // For multi-player mode: which player is selected for replacement
+  const [selectedMatchPlayer, setSelectedMatchPlayer] = useState<MatchPlayer | null>(null);
+
+  const isMultiMode = !!matchPlayers && matchPlayers.length > 0;
+
+  // Determine current target player (from selection step or legacy props)
+  const activeSlot = selectedMatchPlayer?.slot ?? playerSlot;
+  const activePlayerId = selectedMatchPlayer?.id ?? currentPlayerId;
+  const activePlayerName = selectedMatchPlayer?.name ?? currentPlayerName;
 
   // Filter out players already in this match
   const availablePlayers = allPlayers.filter(
-    (p) => !matchPlayerIds.includes(p.id) || p.id === currentPlayerId
+    (p) => !matchPlayerIds.includes(p.id) || p.id === activePlayerId
   );
 
   // Create guest player mutation
   const createGuestPlayer = useMutation({
     mutationFn: async (name: string): Promise<Player> => {
       const trimmedName = name.trim();
-      
-      // Check if player with this name already exists (case-insensitive)
       const existing = allPlayers.find(
         (p) => p.name.toLowerCase() === trimmedName.toLowerCase()
       );
-      
-      if (existing) {
-        return existing;
-      }
+      if (existing) return existing;
 
-      // Create new guest player
       const insertData: any = {
         name: trimmedName,
         is_guest: true,
         added_by_admin: true,
       };
+      if (sessionId) {
+        insertData.session_id = sessionId;
+      }
       if (groupId) {
         insertData.group_id = groupId;
       } else {
@@ -104,29 +127,26 @@ const PlayerSwapModal = ({
   // Swap player mutation
   const swapPlayer = useMutation({
     mutationFn: async (substitutePlayerId: string) => {
-      // Validate substitute is not already in the match (excluding the slot being replaced)
-      const otherPlayerIds = matchPlayerIds.filter((id) => id !== currentPlayerId);
+      const otherPlayerIds = matchPlayerIds.filter((id) => id !== activePlayerId);
       if (otherPlayerIds.includes(substitutePlayerId)) {
         throw new Error("Player already in this match");
       }
 
-      // Update the match with the new player
       const { error: matchError } = await supabase
         .from("matches")
-        .update({ [playerSlot]: substitutePlayerId })
+        .update({ [activeSlot!]: substitutePlayerId })
         .eq("id", matchId);
 
       if (matchError) throw matchError;
 
-      // Insert audit record
       const auditData: any = {
         match_id: matchId,
-        replaced_player_id: currentPlayerId,
+        replaced_player_id: activePlayerId,
         substitute_player_id: substitutePlayerId,
       };
       if (groupId) {
         auditData.group_id = groupId;
-        auditData.court_id = 0; // placeholder for non-null constraint
+        auditData.court_id = 0;
       } else {
         auditData.court_id = courtId;
       }
@@ -164,7 +184,15 @@ const PlayerSwapModal = ({
     setSelectedPlayerId("");
     setGuestName("");
     setSelectedTab("existing");
+    setSelectedMatchPlayer(null);
     onOpenChange(false);
+  };
+
+  const handleBack = () => {
+    setSelectedPlayerId("");
+    setGuestName("");
+    setSelectedTab("existing");
+    setSelectedMatchPlayer(null);
   };
 
   const handleConfirmSwap = async () => {
@@ -178,36 +206,29 @@ const PlayerSwapModal = ({
         }
         substituteId = selectedPlayerId;
       } else {
-        // Guest tab
         const trimmedName = guestName.trim();
         if (!trimmedName) {
           toast.error("Please enter a valid name");
           return;
         }
 
-        // Check if this would be the same player
         const existing = allPlayers.find(
           (p) => p.name.toLowerCase() === trimmedName.toLowerCase()
         );
-        if (existing?.id === currentPlayerId) {
+        if (existing?.id === activePlayerId) {
           toast.error("Cannot swap with the same player");
           return;
         }
-
-        // Check if existing player is already in match
-        if (existing && matchPlayerIds.includes(existing.id) && existing.id !== currentPlayerId) {
+        if (existing && matchPlayerIds.includes(existing.id) && existing.id !== activePlayerId) {
           toast.error("Player already in this match");
           return;
         }
 
         const guestPlayer = await createGuestPlayer.mutateAsync(trimmedName);
         substituteId = guestPlayer.id;
-        
-        // Refresh players list to include new guest
         queryClient.invalidateQueries({ queryKey: ["players", courtId] });
       }
 
-      // Perform the swap
       await swapPlayer.mutateAsync(substituteId);
     } catch (error) {
       // Error handled in mutation onError
@@ -216,78 +237,119 @@ const PlayerSwapModal = ({
 
   const isLoading = createGuestPlayer.isPending || swapPlayer.isPending;
 
+  // Determine if we should show player selection step
+  const showPlayerSelection = isMultiMode && !selectedMatchPlayer;
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Replace Player</DialogTitle>
+          <DialogTitle>
+            {showPlayerSelection ? "Edit Lineup" : "Replace Player"}
+          </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="rounded-lg bg-secondary p-3">
-            <p className="text-sm text-muted-foreground">Replacing:</p>
-            <p className="font-semibold text-primary">{currentPlayerName}</p>
+        {showPlayerSelection ? (
+          /* Step 1: Select which player to replace */
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Which player do you want to replace?
+            </p>
+            <div className="grid grid-cols-1 gap-2">
+              {matchPlayers!.map((mp) => (
+                <button
+                  key={mp.slot}
+                  className="flex items-center gap-3 rounded-lg border border-border bg-secondary p-3 text-left transition-colors hover:bg-accent hover:border-primary"
+                  onClick={() => setSelectedMatchPlayer(mp)}
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                    {mp.name.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="text-sm font-medium">{mp.name}</span>
+                </button>
+              ))}
+            </div>
           </div>
+        ) : (
+          /* Step 2: Replacement flow */
+          <div className="space-y-4">
+            {isMultiMode && (
+              <button
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                onClick={handleBack}
+              >
+                <ChevronLeft className="h-3 w-3" />
+                Back to player selection
+              </button>
+            )}
 
-          <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v as "existing" | "guest")}>
-            <TabsList className="w-full">
-              <TabsTrigger value="existing" className="flex-1">
-                Select Replacement
-              </TabsTrigger>
-              <TabsTrigger value="guest" className="flex-1">
-                Add Guest
-              </TabsTrigger>
-            </TabsList>
+            <div className="rounded-lg bg-secondary p-3">
+              <p className="text-sm text-muted-foreground">Replacing:</p>
+              <p className="font-semibold text-primary">{activePlayerName}</p>
+            </div>
 
-            <TabsContent value="existing" className="space-y-3 pt-4">
-              <Label>Select replacement player</Label>
-              <Select value={selectedPlayerId} onValueChange={setSelectedPlayerId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a player..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {availablePlayers
-                    .filter((p) => p.id !== currentPlayerId)
-                    .map((player) => (
-                      <SelectItem key={player.id} value={player.id}>
-                        {player.name}
-                        {player.is_guest && (
-                          <span className="ml-2 text-xs text-muted-foreground">(Guest)</span>
-                        )}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              {availablePlayers.filter((p) => p.id !== currentPlayerId).length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  No available players. Use the "Add Guest" tab to add a new player.
+            <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v as "existing" | "guest")}>
+              <TabsList className="w-full">
+                <TabsTrigger value="existing" className="flex-1">
+                  Select Replacement
+                </TabsTrigger>
+                <TabsTrigger value="guest" className="flex-1">
+                  Add Guest
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="existing" className="space-y-3 pt-4">
+                <Label>Select replacement player</Label>
+                <Select value={selectedPlayerId} onValueChange={setSelectedPlayerId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a player..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availablePlayers
+                      .filter((p) => p.id !== activePlayerId)
+                      .map((player) => (
+                        <SelectItem key={player.id} value={player.id}>
+                          {player.name}
+                          {player.is_guest && (
+                            <span className="ml-2 text-xs text-muted-foreground">(Guest)</span>
+                          )}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                {availablePlayers.filter((p) => p.id !== activePlayerId).length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    No available players. Use the "Add Guest" tab to add a new player.
+                  </p>
+                )}
+              </TabsContent>
+
+              <TabsContent value="guest" className="space-y-3 pt-4">
+                <Label>Guest player name</Label>
+                <Input
+                  placeholder="Type name..."
+                  value={guestName}
+                  onChange={(e) => setGuestName(e.target.value)}
+                  autoFocus
+                />
+                <p className="text-xs text-muted-foreground">
+                  If this name already exists, the existing player will be used.
                 </p>
-              )}
-            </TabsContent>
+              </TabsContent>
+            </Tabs>
+          </div>
+        )}
 
-            <TabsContent value="guest" className="space-y-3 pt-4">
-              <Label>Guest player name</Label>
-              <Input
-                placeholder="Type name..."
-                value={guestName}
-                onChange={(e) => setGuestName(e.target.value)}
-                autoFocus
-              />
-              <p className="text-xs text-muted-foreground">
-                If this name already exists, the existing player will be used.
-              </p>
-            </TabsContent>
-          </Tabs>
-        </div>
-
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={handleClose} disabled={isLoading}>
-            Cancel
-          </Button>
-          <Button onClick={handleConfirmSwap} disabled={isLoading}>
-            {isLoading ? "Swapping..." : "Confirm Swap"}
-          </Button>
-        </DialogFooter>
+        {!showPlayerSelection && (
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={handleClose} disabled={isLoading}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmSwap} disabled={isLoading}>
+              {isLoading ? "Swapping..." : "Confirm Swap"}
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

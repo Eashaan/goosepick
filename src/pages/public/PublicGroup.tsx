@@ -28,22 +28,35 @@ const PublicGroup = () => {
     }
   }, [contextLoading, isContextValid, navigate]);
 
-  // Fetch group details — validate it belongs to active session
+  // Fetch group details — resolve to the correct group for the active session
   const { data: group, isLoading: groupLoading } = useQuery({
     queryKey: ["court_group", groupId, sessionId],
     queryFn: async () => {
-      let query = supabase
+      // First fetch the group by URL param
+      const { data: urlGroup, error } = await supabase
         .from("court_groups")
         .select("*")
-        .eq("id", groupId!);
-      // Scope: group must belong to current session OR have no session
-      const { data, error } = await query.maybeSingle();
+        .eq("id", groupId!)
+        .maybeSingle();
       if (error) throw error;
-      // Validate the group belongs to current session scope
-      if (data && sessionId && data.session_id && data.session_id !== sessionId) {
-        return null; // Wrong session
-      }
-      return data;
+      if (!urlGroup) return null;
+
+      // If this group already belongs to the live session, use it directly
+      if (!sessionId || urlGroup.session_id === sessionId) return urlGroup;
+
+      // Otherwise, find the equivalent group for the live session
+      // (same session_config_id, same court_ids pattern)
+      const { data: liveGroup } = await supabase
+        .from("court_groups")
+        .select("*")
+        .eq("session_config_id", urlGroup.session_config_id)
+        .eq("session_id", sessionId);
+
+      // Match by court_ids content
+      const match = liveGroup?.find(
+        (g: any) => JSON.stringify(g.court_ids?.sort()) === JSON.stringify(urlGroup.court_ids?.sort())
+      );
+      return match || urlGroup; // Fallback to original if no live equivalent
     },
     enabled: !!groupId && isContextValid && !sessionLoading,
   });
@@ -155,11 +168,30 @@ const PublicGroup = () => {
     };
   }, [groupId, queryClient, isContextValid, sessionId]);
 
-  // Derive display name from court numbers
+  // Fetch court_units to get display court numbers for this group
+  const { data: groupCourtUnit } = useQuery({
+    queryKey: ["court_unit_for_group", group?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("court_units" as any)
+        .select("group_court_numbers")
+        .eq("court_group_id", group!.id)
+        .maybeSingle();
+      return data as unknown as { group_court_numbers: number[] | null } | null;
+    },
+    enabled: !!group?.id,
+  });
+
+  // Derive display name from court_units group_court_numbers (display numbers), not court_groups.court_ids (DB PKs)
   const groupLabel = useMemo(() => {
-    if (!group?.court_ids || group.court_ids.length === 0) return "Group";
-    return `Courts ${group.court_ids.join(" & ")}`;
-  }, [group?.court_ids]);
+    const nums = groupCourtUnit?.group_court_numbers || group?.court_ids;
+    if (!nums || nums.length === 0) return "Group";
+    if (nums.length === 1) return `Court ${nums[0]}`;
+    if (nums.length === 2) return `Courts ${nums[0]} & ${nums[1]}`;
+    const last = nums[nums.length - 1];
+    const rest = nums.slice(0, -1);
+    return `Courts ${rest.join(", ")} & ${last}`;
+  }, [groupCourtUnit?.group_court_numbers, group?.court_ids]);
 
   if (contextLoading || sessionLoading || groupLoading) {
     return (
@@ -225,6 +257,7 @@ const PublicGroup = () => {
               matches={matches}
               courtState={syntheticCourtState}
               courtsInGroup={group?.court_ids?.length || 1}
+              groupId={group?.id}
             />
           </TabsContent>
 

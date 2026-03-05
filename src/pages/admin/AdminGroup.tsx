@@ -22,7 +22,7 @@ import { Database } from "@/integrations/supabase/types";
 
 type FormatType = Database["public"]["Enums"]["format_type"];
 type Match = Database["public"]["Tables"]["matches"]["Row"];
-type PlayerSlot = "team1_player1_id" | "team1_player2_id" | "team2_player1_id" | "team2_player2_id";
+
 
 interface GroupCourtState {
   id: string;
@@ -81,12 +81,7 @@ const AdminGroup = () => {
 
   // Swap modal state
   const [swapModalOpen, setSwapModalOpen] = useState(false);
-  const [swapTarget, setSwapTarget] = useState<{
-    playerId: string;
-    playerName: string;
-    slot: PlayerSlot;
-    matchId: string;
-  } | null>(null);
+  const [swapMatchId, setSwapMatchId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !isAdmin) navigate("/admin/login");
@@ -668,12 +663,7 @@ const AdminGroup = () => {
                                         <button
                                           className="text-xs text-primary underline ml-auto"
                                           onClick={() => {
-                                            setSwapTarget({
-                                              playerId: displayMatch.team1_player1_id!,
-                                              playerName: getPlayerName(displayMatch.team1_player1_id),
-                                              slot: "team1_player1_id",
-                                              matchId: displayMatch.id,
-                                            });
+                                            setSwapMatchId(displayMatch.id);
                                             setSwapModalOpen(true);
                                           }}
                                         >
@@ -881,23 +871,32 @@ const AdminGroup = () => {
       </div>
 
       {/* Swap modal */}
-      {swapTarget && (
-        <PlayerSwapModal
-          open={swapModalOpen}
-          onOpenChange={setSwapModalOpen}
-          courtId={0}
-          groupId={groupId}
-          matchId={swapTarget.matchId}
-          playerSlot={swapTarget.slot}
-          currentPlayerId={swapTarget.playerId}
-          currentPlayerName={swapTarget.playerName}
-          allPlayers={players as any}
-          matchPlayerIds={(() => {
-            const m = matches.find(m => m.id === swapTarget.matchId);
-            return m ? [m.team1_player1_id, m.team1_player2_id, m.team2_player1_id, m.team2_player2_id] : [];
-          })()}
-        />
-      )}
+      {swapMatchId && (() => {
+        const m = matches.find(m => m.id === swapMatchId);
+        if (!m) return null;
+        const matchPlayers = [
+          { id: m.team1_player1_id!, name: getPlayerName(m.team1_player1_id), slot: "team1_player1_id" as const },
+          { id: m.team1_player2_id!, name: getPlayerName(m.team1_player2_id), slot: "team1_player2_id" as const },
+          { id: m.team2_player1_id!, name: getPlayerName(m.team2_player1_id), slot: "team2_player1_id" as const },
+          { id: m.team2_player2_id!, name: getPlayerName(m.team2_player2_id), slot: "team2_player2_id" as const },
+        ].filter(mp => !!mp.id);
+        return (
+          <PlayerSwapModal
+            open={swapModalOpen}
+            onOpenChange={(open) => {
+              setSwapModalOpen(open);
+              if (!open) setSwapMatchId(null);
+            }}
+            courtId={0}
+            groupId={groupId}
+            sessionId={sessionId}
+            matchId={swapMatchId}
+            matchPlayers={matchPlayers}
+            allPlayers={players as any}
+            matchPlayerIds={[m.team1_player1_id, m.team1_player2_id, m.team2_player1_id, m.team2_player2_id]}
+          />
+        );
+      })()}
     </PageLayout>
   );
 };
