@@ -142,9 +142,30 @@ serve(async (req) => {
     const players = playersRes.data || [];
     const matches = matchesRes.data || [];
     const courts = courtsRes.data || [];
-    const groups = groupsRes.data || [];
+    let groups = groupsRes.data || [];
     const units = unitsRes.data || [];
     const feedback = feedbackRes.data || [];
+
+    // Collect all group IDs referenced by matches/players that may not be in the session's court_groups
+    const knownGroupIds = new Set(groups.map((g: any) => g.id));
+    const missingGroupIds = new Set<string>();
+    for (const m of matches) {
+      if (m.group_id && !knownGroupIds.has(m.group_id)) missingGroupIds.add(m.group_id);
+    }
+    for (const p of players) {
+      if (p.group_id && !knownGroupIds.has(p.group_id)) missingGroupIds.add(p.group_id);
+    }
+
+    // Fetch any missing groups by their IDs
+    if (missingGroupIds.size > 0) {
+      const { data: extraGroups } = await db
+        .from("court_groups")
+        .select("id, court_ids")
+        .in("id", Array.from(missingGroupIds));
+      if (extraGroups) {
+        groups = [...groups, ...extraGroups];
+      }
+    }
 
     // Build maps
     const playerMap = new Map<string, string>();
