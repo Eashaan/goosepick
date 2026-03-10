@@ -459,11 +459,17 @@ const AdminGroup = () => {
     return matches.filter(m => m.status === "pending" && !activeMIds.has(m.id));
   };
 
-  // Group label
-  const displayNumbers = courtNumbers.map((_, i) => i + 1);
-  const groupLabel = displayNumbers.length <= 2
-    ? `Courts ${displayNumbers.join(" & ")}`
-    : `Courts ${displayNumbers.slice(0, -1).join(", ")} & ${displayNumbers[displayNumbers.length - 1]}`;
+  // Group label — prefer court_units display numbers over raw court_ids
+  const groupLabel = useMemo(() => {
+    const nums = groupCourtUnit?.group_court_numbers || courtNumbers;
+    if (!nums || nums.length === 0) return "Group";
+    const display = groupCourtUnit?.group_court_numbers ? nums : nums.map((_, i) => i + 1);
+    if (display.length === 1) return `Court ${display[0]}`;
+    if (display.length === 2) return `Courts ${display[0]} & ${display[1]}`;
+    const last = display[display.length - 1];
+    const rest = display.slice(0, -1);
+    return `Courts ${rest.join(", ")} & ${last}`;
+  }, [groupCourtUnit?.group_court_numbers, courtNumbers]);
 
   if (authLoading || groupLoading) {
     return (
