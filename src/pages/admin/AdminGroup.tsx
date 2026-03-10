@@ -104,6 +104,8 @@ const AdminGroup = () => {
 
   const courtNumbers: number[] = group?.court_ids || [];
   const N = courtNumbers.length;
+  // Map raw court_id → local 1-indexed display number
+  const courtDisplayNumber = (cn: number): number => courtNumbers.indexOf(cn) + 1;
 
   // ── Fetch players ──
   const { data: players = [], isLoading: playersLoading } = useQuery({
