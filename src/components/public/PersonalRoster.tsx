@@ -23,9 +23,10 @@ interface PersonalRosterProps {
   courtState: CourtState | undefined;
   courtsInGroup?: number;
   groupId?: string;
+  courtIds?: number[];
 }
 
-const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup = 1, groupId }: PersonalRosterProps) => {
+const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup = 1, groupId, courtIds }: PersonalRosterProps) => {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [statsOpen, setStatsOpen] = useState(true);
   const [showStatsCard, setShowStatsCard] = useState(false);
@@ -86,9 +87,11 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
         m.team2_player1_id === selectedPlayerId ||
         m.team2_player2_id === selectedPlayerId
       );
-      const courtLabel = playerCurrentMatch?.court_number
-        ? `Court ${playerCurrentMatch.court_number}`
-        : `Court ${courtId}`;
+      const rawCourtNum = playerCurrentMatch?.court_number;
+      const displayNum = rawCourtNum && courtIds
+        ? courtIds.indexOf(rawCourtNum) + 1 || rawCourtNum
+        : rawCourtNum || courtId;
+      const courtLabel = `Court ${displayNum}`;
       return { text: `You're live on ${courtLabel}.`, type: "playing" };
     }
 

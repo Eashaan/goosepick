@@ -102,7 +102,29 @@ const AdminGroup = () => {
     enabled: !!groupId,
   });
 
-  const courtNumbers: number[] = group?.court_ids || [];
+  // Fetch court_units to get display court numbers for this group
+  const { data: groupCourtUnit } = useQuery({
+    queryKey: ["court_unit_for_group", group?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("court_units" as any)
+        .select("group_court_numbers")
+        .eq("court_group_id", group!.id)
+        .maybeSingle();
+      return data as unknown as { group_court_numbers: number[] | null } | null;
+    },
+    enabled: !!group?.id,
+  });
+
+  const courtNumbers: number[] = (group?.court_ids?.length ? group.court_ids : null)
+    || groupCourtUnit?.group_court_numbers
+    || [];
+  // Map raw court_id → local 1-indexed display number
+  const courtDisplayNumber = (cn: number): number => {
+    const idx = courtNumbers.indexOf(cn);
+    return idx >= 0 ? idx + 1 : cn;
+  };
+
   const N = courtNumbers.length;
 
   // ── Fetch players ──
@@ -443,10 +465,17 @@ const AdminGroup = () => {
     return matches.filter(m => m.status === "pending" && !activeMIds.has(m.id));
   };
 
-  // Group label
-  const groupLabel = courtNumbers.length <= 2
-    ? `Courts ${courtNumbers.join(" & ")}`
-    : `Courts ${courtNumbers.slice(0, -1).join(", ")} & ${courtNumbers[courtNumbers.length - 1]}`;
+  // Group label — prefer court_units display numbers over raw court_ids
+  const groupLabel = useMemo(() => {
+    const nums = groupCourtUnit?.group_court_numbers || courtNumbers;
+    if (!nums || nums.length === 0) return "Group";
+    const display = groupCourtUnit?.group_court_numbers ? nums : nums.map((_, i) => i + 1);
+    if (display.length === 1) return `Court ${display[0]}`;
+    if (display.length === 2) return `Courts ${display[0]} & ${display[1]}`;
+    const last = display[display.length - 1];
+    const rest = display.slice(0, -1);
+    return `Courts ${rest.join(", ")} & ${last}`;
+  }, [groupCourtUnit?.group_court_numbers, courtNumbers]);
 
   if (authLoading || groupLoading) {
     return (
@@ -640,7 +669,7 @@ const AdminGroup = () => {
                             <CardHeader className="pb-2">
                               <div className="flex items-center justify-between">
                                 <CardTitle className="text-base">
-                                  Court {cn}
+                                  Court {courtDisplayNumber(cn)}
                                   {isLive && <span className="ml-2 inline-block w-2 h-2 rounded-full bg-primary animate-pulse" />}
                                 </CardTitle>
                                 {displayMatch && (

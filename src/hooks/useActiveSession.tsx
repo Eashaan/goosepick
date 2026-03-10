@@ -140,7 +140,23 @@ export function useActiveSession() {
           } as any)
           .eq("id", activeSession.id);
         if (error) throw error;
-        return activeSession.id;
+      return activeSession.id;
+    }
+
+    // Promote ended session back to live (same-day restart)
+    if (activeSession?.status === "ended") {
+      const { error } = await supabase
+        .from("sessions" as any)
+        .update({
+          status: "live",
+          started_at: new Date().toISOString(),
+          ended_at: null,
+          is_active: true,
+          session_label: buildLabel(),
+        } as any)
+        .eq("id", activeSession.id);
+      if (error) throw error;
+      return activeSession.id;
       }
 
       // Create new live session

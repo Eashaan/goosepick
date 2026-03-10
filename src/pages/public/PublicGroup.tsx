@@ -258,6 +258,7 @@ const PublicGroup = () => {
               courtState={syntheticCourtState}
               courtsInGroup={group?.court_ids?.length || 1}
               groupId={group?.id}
+              courtIds={group?.court_ids}
             />
           </TabsContent>
 
