@@ -23,6 +23,7 @@ interface PersonalRosterProps {
   courtState: CourtState | undefined;
   courtsInGroup?: number;
   groupId?: string;
+  courtIds?: number[];
 }
 
 const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup = 1, groupId }: PersonalRosterProps) => {
