@@ -104,6 +104,8 @@ const AdminGroup = () => {
 
   const courtNumbers: number[] = group?.court_ids || [];
   const N = courtNumbers.length;
+  // Map raw court_id → local 1-indexed display number
+  const courtDisplayNumber = (cn: number): number => courtNumbers.indexOf(cn) + 1;
 
   // ── Fetch players ──
   const { data: players = [], isLoading: playersLoading } = useQuery({
@@ -444,9 +446,10 @@ const AdminGroup = () => {
   };
 
   // Group label
-  const groupLabel = courtNumbers.length <= 2
-    ? `Courts ${courtNumbers.join(" & ")}`
-    : `Courts ${courtNumbers.slice(0, -1).join(", ")} & ${courtNumbers[courtNumbers.length - 1]}`;
+  const displayNumbers = courtNumbers.map((_, i) => i + 1);
+  const groupLabel = displayNumbers.length <= 2
+    ? `Courts ${displayNumbers.join(" & ")}`
+    : `Courts ${displayNumbers.slice(0, -1).join(", ")} & ${displayNumbers[displayNumbers.length - 1]}`;
 
   if (authLoading || groupLoading) {
     return (
@@ -640,7 +643,7 @@ const AdminGroup = () => {
                             <CardHeader className="pb-2">
                               <div className="flex items-center justify-between">
                                 <CardTitle className="text-base">
-                                  Court {cn}
+                                  Court {courtDisplayNumber(cn)}
                                   {isLive && <span className="ml-2 inline-block w-2 h-2 rounded-full bg-primary animate-pulse" />}
                                 </CardTitle>
                                 {displayMatch && (
