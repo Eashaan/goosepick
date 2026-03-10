@@ -87,9 +87,11 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
         m.team2_player1_id === selectedPlayerId ||
         m.team2_player2_id === selectedPlayerId
       );
-      const courtLabel = playerCurrentMatch?.court_number
-        ? `Court ${playerCurrentMatch.court_number}`
-        : `Court ${courtId}`;
+      const rawCourtNum = playerCurrentMatch?.court_number;
+      const displayNum = rawCourtNum && courtIds
+        ? courtIds.indexOf(rawCourtNum) + 1 || rawCourtNum
+        : rawCourtNum || courtId;
+      const courtLabel = `Court ${displayNum}`;
       return { text: `You're live on ${courtLabel}.`, type: "playing" };
     }
 
