@@ -643,7 +643,7 @@ const AdminGroup = () => {
                             <CardHeader className="pb-2">
                               <div className="flex items-center justify-between">
                                 <CardTitle className="text-base">
-                                  Court {cn}
+                                  Court {courtDisplayNumber(cn)}
                                   {isLive && <span className="ml-2 inline-block w-2 h-2 rounded-full bg-primary animate-pulse" />}
                                 </CardTitle>
                                 {displayMatch && (
