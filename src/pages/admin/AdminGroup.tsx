@@ -102,9 +102,14 @@ const AdminGroup = () => {
     enabled: !!groupId,
   });
 
-  const courtNumbers: number[] = group?.court_ids || [];
+  const courtNumbers: number[] = (group?.court_ids?.length ? group.court_ids : null)
+    || groupCourtUnit?.group_court_numbers
+    || [];
   // Map raw court_id → local 1-indexed display number
-  const courtDisplayNumber = (cn: number): number => courtNumbers.indexOf(cn) + 1;
+  const courtDisplayNumber = (cn: number): number => {
+    const idx = courtNumbers.indexOf(cn);
+    return idx >= 0 ? idx + 1 : cn;
+  };
 
   // Fetch court_units to get display court numbers for this group
   const { data: groupCourtUnit } = useQuery({
