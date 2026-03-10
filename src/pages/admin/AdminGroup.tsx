@@ -107,6 +107,20 @@ const AdminGroup = () => {
   // Map raw court_id → local 1-indexed display number
   const courtDisplayNumber = (cn: number): number => courtNumbers.indexOf(cn) + 1;
 
+  // Fetch court_units to get display court numbers for this group
+  const { data: groupCourtUnit } = useQuery({
+    queryKey: ["court_unit_for_group", group?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("court_units" as any)
+        .select("group_court_numbers")
+        .eq("court_group_id", group!.id)
+        .maybeSingle();
+      return data as unknown as { group_court_numbers: number[] | null } | null;
+    },
+    enabled: !!group?.id,
+  });
+
   // ── Fetch players ──
   const { data: players = [], isLoading: playersLoading } = useQuery({
     queryKey: ["group_players", groupId, sessionId],
