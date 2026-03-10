@@ -107,6 +107,20 @@ const AdminGroup = () => {
   // Map raw court_id → local 1-indexed display number
   const courtDisplayNumber = (cn: number): number => courtNumbers.indexOf(cn) + 1;
 
+  // Fetch court_units to get display court numbers for this group
+  const { data: groupCourtUnit } = useQuery({
+    queryKey: ["court_unit_for_group", group?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("court_units" as any)
+        .select("group_court_numbers")
+        .eq("court_group_id", group!.id)
+        .maybeSingle();
+      return data as unknown as { group_court_numbers: number[] | null } | null;
+    },
+    enabled: !!group?.id,
+  });
+
   // ── Fetch players ──
   const { data: players = [], isLoading: playersLoading } = useQuery({
     queryKey: ["group_players", groupId, sessionId],
@@ -445,11 +459,17 @@ const AdminGroup = () => {
     return matches.filter(m => m.status === "pending" && !activeMIds.has(m.id));
   };
 
-  // Group label
-  const displayNumbers = courtNumbers.map((_, i) => i + 1);
-  const groupLabel = displayNumbers.length <= 2
-    ? `Courts ${displayNumbers.join(" & ")}`
-    : `Courts ${displayNumbers.slice(0, -1).join(", ")} & ${displayNumbers[displayNumbers.length - 1]}`;
+  // Group label — prefer court_units display numbers over raw court_ids
+  const groupLabel = useMemo(() => {
+    const nums = groupCourtUnit?.group_court_numbers || courtNumbers;
+    if (!nums || nums.length === 0) return "Group";
+    const display = groupCourtUnit?.group_court_numbers ? nums : nums.map((_, i) => i + 1);
+    if (display.length === 1) return `Court ${display[0]}`;
+    if (display.length === 2) return `Courts ${display[0]} & ${display[1]}`;
+    const last = display[display.length - 1];
+    const rest = display.slice(0, -1);
+    return `Courts ${rest.join(", ")} & ${last}`;
+  }, [groupCourtUnit?.group_court_numbers, courtNumbers]);
 
   if (authLoading || groupLoading) {
     return (
