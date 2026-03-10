@@ -102,15 +102,6 @@ const AdminGroup = () => {
     enabled: !!groupId,
   });
 
-  const courtNumbers: number[] = (group?.court_ids?.length ? group.court_ids : null)
-    || groupCourtUnit?.group_court_numbers
-    || [];
-  // Map raw court_id → local 1-indexed display number
-  const courtDisplayNumber = (cn: number): number => {
-    const idx = courtNumbers.indexOf(cn);
-    return idx >= 0 ? idx + 1 : cn;
-  };
-
   // Fetch court_units to get display court numbers for this group
   const { data: groupCourtUnit } = useQuery({
     queryKey: ["court_unit_for_group", group?.id],
@@ -125,7 +116,16 @@ const AdminGroup = () => {
     enabled: !!group?.id,
   });
 
-  const N = courtNumbers.length || (groupCourtUnit?.group_court_numbers?.length ?? 0);
+  const courtNumbers: number[] = (group?.court_ids?.length ? group.court_ids : null)
+    || groupCourtUnit?.group_court_numbers
+    || [];
+  // Map raw court_id → local 1-indexed display number
+  const courtDisplayNumber = (cn: number): number => {
+    const idx = courtNumbers.indexOf(cn);
+    return idx >= 0 ? idx + 1 : cn;
+  };
+
+  const N = courtNumbers.length;
 
   // ── Fetch players ──
   const { data: players = [], isLoading: playersLoading } = useQuery({
