@@ -446,9 +446,10 @@ const AdminGroup = () => {
   };
 
   // Group label
-  const groupLabel = courtNumbers.length <= 2
-    ? `Courts ${courtNumbers.join(" & ")}`
-    : `Courts ${courtNumbers.slice(0, -1).join(", ")} & ${courtNumbers[courtNumbers.length - 1]}`;
+  const displayNumbers = courtNumbers.map((_, i) => i + 1);
+  const groupLabel = displayNumbers.length <= 2
+    ? `Courts ${displayNumbers.join(" & ")}`
+    : `Courts ${displayNumbers.slice(0, -1).join(", ")} & ${displayNumbers[displayNumbers.length - 1]}`;
 
   if (authLoading || groupLoading) {
     return (
