@@ -84,7 +84,7 @@ const GroupCourtPulse = ({ courtStates, matches, players, totalMatches, courtIds
               className="p-3 rounded-xl bg-primary/10 border border-primary/30"
             >
               <p className="text-xs text-muted-foreground mb-2 font-medium">
-                Court {cs.court_number}
+                Court {courtDisplayNumber(courtIds, cs.court_number)}
               </p>
               <div className="flex items-center justify-center gap-4 text-center">
                 <div className="flex-1">
