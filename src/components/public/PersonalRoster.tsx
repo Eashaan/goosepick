@@ -26,7 +26,7 @@ interface PersonalRosterProps {
   courtIds?: number[];
 }
 
-const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup = 1, groupId }: PersonalRosterProps) => {
+const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup = 1, groupId, courtIds }: PersonalRosterProps) => {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [statsOpen, setStatsOpen] = useState(true);
   const [showStatsCard, setShowStatsCard] = useState(false);
