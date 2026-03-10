@@ -383,7 +383,20 @@ serve(async (req) => {
       return errorResponse("precheck", "Group not found", groupError?.message, groupError?.code);
     }
 
-    const courtNumbers: number[] = group.court_ids || [];
+    let courtNumbers: number[] = group.court_ids || [];
+
+    if (courtNumbers.length === 0) {
+      const { data: courtUnit } = await supabase
+        .from("court_units")
+        .select("group_court_numbers")
+        .eq("court_group_id", groupId)
+        .maybeSingle();
+
+      if (courtUnit?.group_court_numbers) {
+        courtNumbers = courtUnit.group_court_numbers;
+      }
+    }
+
     const N = courtNumbers.length;
 
     if (N < 1) {
