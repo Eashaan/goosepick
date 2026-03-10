@@ -84,20 +84,19 @@ serve(async (req) => {
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Verify admin
+    // Verify admin using getUser
     const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claims, error: claimsError } = await userSupabase.auth.getClaims(token);
-    if (claimsError || !claims?.claims?.sub) {
+    const { data: { user }, error: userError } = await userSupabase.auth.getUser();
+    if (userError || !user) {
       return new Response(JSON.stringify({ error: "Invalid auth" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const userId = claims.claims.sub;
+    const userId = user.id;
     const db = createClient(supabaseUrl, supabaseServiceKey);
 
     const { data: roleData } = await db
@@ -129,13 +128,14 @@ serve(async (req) => {
       });
     }
 
-    // Fetch all data by session_id to capture both court-based and group-based records
     const [playersRes, matchesRes, courtsRes, groupsRes, unitsRes, feedbackRes] = await Promise.all([
       db.from("players").select("*").eq("session_id", sessionId),
       db.from("matches").select("*").eq("session_id", sessionId).order("global_match_index", { ascending: true }),
       db.from("courts").select("id, name").eq("session_id", sessionId),
       db.from("court_groups").select("id, court_ids").eq("session_id", sessionId),
-      db.from("court_units").select("display_name, court_id, court_group_id, type"),
+      db.from("court_units").select("display_name, court_id, court_group_id, type, group_court_numbers")
+        .eq("city_id", session.city_id)
+        .eq("event_type", session.event_type),
       db.from("feedback").select("*").eq("session_id", sessionId),
     ]);
 
@@ -153,7 +153,7 @@ serve(async (req) => {
     const courtMap = new Map<number, string>();
     courts.forEach((c: any) => courtMap.set(c.id, c.name));
 
-    // Map group_id -> display_name from court_units
+    // Map group_id -> display_name
     const groupDisplayMap = new Map<string, string>();
     units.forEach((u: any) => {
       if (u.type === "group" && u.court_group_id) {
@@ -171,10 +171,22 @@ serve(async (req) => {
 
     const pName = (id: string | null) => (id ? playerMap.get(id) || "" : "");
 
+    // Build player lists per group and per court
+    const groupPlayerMap = new Map<string, any[]>();
+    const courtPlayerMap = new Map<number, any[]>();
+    for (const p of players) {
+      if (p.group_id) {
+        if (!groupPlayerMap.has(p.group_id)) groupPlayerMap.set(p.group_id, []);
+        groupPlayerMap.get(p.group_id)!.push(p);
+      } else if (p.court_id) {
+        if (!courtPlayerMap.has(p.court_id)) courtPlayerMap.set(p.court_id, []);
+        courtPlayerMap.get(p.court_id)!.push(p);
+      }
+    }
+
     // Separate matches into groups and standalone courts
     const groupMatchMap = new Map<string, any[]>();
     const courtMatchMap = new Map<number, any[]>();
-
     for (const m of matches) {
       if (m.group_id) {
         if (!groupMatchMap.has(m.group_id)) groupMatchMap.set(m.group_id, []);
@@ -187,13 +199,22 @@ serve(async (req) => {
 
     const lines: string[] = [];
 
-    // Helper to render a section (matches + leaderboard) for a list of matches
-    function renderSection(label: string, sectionMatches: any[]) {
+    // Render a full section: players + match roster + leaderboard
+    function renderSection(label: string, sectionPlayers: any[], sectionMatches: any[]) {
       lines.push(`=== ${label} ===`);
       lines.push("");
-      lines.push("-- MATCHES --");
-      lines.push(row("Match #", "Court #", "Team 1 Player 1", "Team 1 Player 2", "Team 2 Player 1", "Team 2 Player 2", "Team 1 Score", "Team 2 Score", "Status", "Started At", "Completed At"));
 
+      // Players
+      lines.push(`-- PLAYERS (${sectionPlayers.length}) --`);
+      lines.push(row("Player Name"));
+      for (const p of sectionPlayers) {
+        lines.push(row(p.name));
+      }
+      lines.push("");
+
+      // Match Roster
+      lines.push("-- MATCH ROSTER --");
+      lines.push(row("Match #", "Court #", "Team 1 Player 1", "Team 1 Player 2", "Team 2 Player 1", "Team 2 Player 2", "Team 1 Score", "Team 2 Score", "Status", "Started At", "Completed At"));
       for (const m of sectionMatches) {
         lines.push(row(
           (m.global_match_index ?? m.match_index) + 1,
@@ -209,48 +230,38 @@ serve(async (req) => {
           m.completed_at || "",
         ));
       }
-
       lines.push("");
+
+      // Leaderboard
       lines.push("-- LEADERBOARD --");
       lines.push(row("Rank", "Player", "Matches", "Wins", "Win %", "Avg Point Diff", "Performance Index"));
-
       const lb = computeLeaderboard(sectionMatches, playerMap);
       lb.forEach((p, i) => {
         lines.push(row(i + 1, p.name, p.matches, p.wins, p.winPct.toFixed(1) + "%", p.avgDiff.toFixed(2), p.perfIndex.toFixed(2)));
       });
 
       lines.push("");
+      lines.push("");
     }
 
     // Render group sections
     for (const g of groups) {
       const gMatches = groupMatchMap.get(g.id) || [];
-      if (gMatches.length === 0) continue;
+      const gPlayers = groupPlayerMap.get(g.id) || [];
+      if (gMatches.length === 0 && gPlayers.length === 0) continue;
       const label = groupDisplayMap.get(g.id) || `Group (${g.court_ids.join(", ")})`;
-      renderSection(label, gMatches);
+      renderSection(label, gPlayers, gMatches);
     }
 
     // Render standalone court sections
     for (const [courtId, cMatches] of courtMatchMap) {
+      const cPlayers = courtPlayerMap.get(courtId) || [];
       const label = courtDisplayMap.get(courtId) || courtMap.get(courtId) || `Court ${courtId}`;
-      renderSection(label, cMatches);
-    }
-
-    // Players list
-    lines.push("=== PLAYERS ===");
-    lines.push(row("Player Name", "Court", "Group", "Created At"));
-    for (const p of players) {
-      lines.push(row(
-        p.name,
-        p.court_id ? (courtMap.get(p.court_id) || p.court_id) : "",
-        p.group_id ? (groupDisplayMap.get(p.group_id) || p.group_id) : "",
-        p.created_at,
-      ));
+      renderSection(label, cPlayers, cMatches);
     }
 
     // Feedback
     if (feedback.length > 0) {
-      lines.push("");
       lines.push("=== FEEDBACK ===");
       lines.push(row("Player", "Rating", "Note", "Submitted At"));
       for (const f of feedback) {
