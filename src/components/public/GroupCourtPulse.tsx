@@ -12,6 +12,8 @@ interface GroupCourtPulseProps {
   courtIds: number[];
 }
 
+const courtDisplayNumber = (courtIds: number[], cn: number): number => courtIds.indexOf(cn) + 1;
+
 const GroupCourtPulse = ({ courtStates, matches, players, totalMatches, courtIds }: GroupCourtPulseProps) => {
   const getPlayerName = (playerId: string | null) => {
     if (!playerId) return "—";
