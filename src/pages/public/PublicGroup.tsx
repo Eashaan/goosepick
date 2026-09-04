@@ -138,6 +138,7 @@ const PublicGroup = () => {
       : 0;
 
     return {
+      id: `synthetic-${resolvedGroupId ?? "group"}`,
       court_id: syntheticCourtId,
       current_match_index: currentRound,
       phase: allMatchesDone ? "completed" as const : anyLive ? "in_progress" as const : "idle" as const,
