@@ -84,13 +84,8 @@ serve(async (req) => {
     result = await scopeGroup(supabase.from("matches").delete());
     assertNoError("Deleting group matches failed", result.error);
 
-    result = await supabase.from("rotation_audit").delete()
-      .eq("session_id", sessionId)
-      .eq("group_id", groupId);
-    // Older schemas may not yet have group_id on rotation_audit; only ignore missing-column errors.
-    if (result.error && result.error.code !== "42703") {
-      assertNoError("Deleting group rotation audit failed", result.error);
-    }
+    // rotation_audit currently has no group_id column, so group resets deliberately
+    // leave it untouched rather than issuing an invalid/over-broad delete.
 
     if (clearPlayers) {
       const playerResult = await supabase
