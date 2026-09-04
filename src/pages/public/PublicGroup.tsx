@@ -145,7 +145,7 @@ const PublicGroup = () => {
       session_id: group?.session_id ?? null,
       updated_at: new Date().toISOString(),
     };
-  }, [courtStates, matches, syntheticCourtId, group?.session_id, group?.court_ids?.length]);
+  }, [courtStates, matches, resolvedGroupId, syntheticCourtId, group?.session_id, group?.court_ids?.length]);
 
   // Realtime subscriptions must also follow the resolved active-session group id.
   useEffect(() => {
