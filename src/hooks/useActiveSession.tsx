@@ -22,7 +22,6 @@ export function useActiveSession() {
   const queryClient = useQueryClient();
   const {
     selectedCityId,
-    selectedEventId,
     selectedLocationId,
     scopeEventType,
     isContextValid,
@@ -33,43 +32,27 @@ export function useActiveSession() {
 
   const scopeKey = [selectedCityId, scopeEventType, selectedLocationId];
 
-  // Fetch the live session (or latest draft/ended)
+  // Resolve the current working session for this scope.
+  // Order matters: live first, then draft. An ended session is historical and must
+  // never displace a newer draft or be silently revived for a new event run.
   const { data: activeSession, isLoading: sessionLoading } = useQuery({
     queryKey: ["active_session", ...scopeKey],
     queryFn: async () => {
-      // Try live first
-      let query = supabase
+      let liveQuery = supabase
         .from("sessions" as any)
         .select("*")
         .eq("city_id", selectedCityId)
         .eq("event_type", scopeEventType!)
         .eq("status", "live");
       if (selectedLocationId) {
-        query = query.eq("location_id", selectedLocationId);
+        liveQuery = liveQuery.eq("location_id", selectedLocationId);
       } else {
-        query = query.is("location_id", null);
+        liveQuery = liveQuery.is("location_id", null);
       }
-      const { data: liveData } = await (query as any).maybeSingle();
+      const { data: liveData, error: liveError } = await (liveQuery as any).maybeSingle();
+      if (liveError) throw liveError;
       if (liveData) return liveData as ActiveSession;
 
-      // Fallback: latest ended (prioritized so Export CSV is available)
-      let endedQuery = supabase
-        .from("sessions" as any)
-        .select("*")
-        .eq("city_id", selectedCityId)
-        .eq("event_type", scopeEventType!)
-        .eq("status", "ended")
-        .order("ended_at", { ascending: false })
-        .limit(1);
-      if (selectedLocationId) {
-        endedQuery = endedQuery.eq("location_id", selectedLocationId);
-      } else {
-        endedQuery = endedQuery.is("location_id", null);
-      }
-      const { data: endedData } = await (endedQuery as any);
-      if (endedData && endedData.length > 0) return endedData[0] as ActiveSession;
-
-      // Fallback: latest draft
       let draftQuery = supabase
         .from("sessions" as any)
         .select("*")
@@ -83,8 +66,28 @@ export function useActiveSession() {
       } else {
         draftQuery = draftQuery.is("location_id", null);
       }
-      const { data: draftData } = await (draftQuery as any);
+      const { data: draftData, error: draftError } = await (draftQuery as any);
+      if (draftError) throw draftError;
       if (draftData && draftData.length > 0) return draftData[0] as ActiveSession;
+
+      // Historical fallback is useful for archive/export UI only when there is no
+      // current live or draft session. startSession() will create a NEW session id.
+      let endedQuery = supabase
+        .from("sessions" as any)
+        .select("*")
+        .eq("city_id", selectedCityId)
+        .eq("event_type", scopeEventType!)
+        .eq("status", "ended")
+        .order("ended_at", { ascending: false })
+        .limit(1);
+      if (selectedLocationId) {
+        endedQuery = endedQuery.eq("location_id", selectedLocationId);
+      } else {
+        endedQuery = endedQuery.is("location_id", null);
+      }
+      const { data: endedData, error: endedError } = await (endedQuery as any);
+      if (endedError) throw endedError;
+      if (endedData && endedData.length > 0) return endedData[0] as ActiveSession;
 
       return null;
     },
@@ -96,7 +99,6 @@ export function useActiveSession() {
     queryClient.invalidateQueries({ queryKey: ["active_session"] });
   };
 
-  // Build a session label
   const buildLabel = () => {
     const today = new Date().toLocaleDateString("en-US", {
       month: "short",
@@ -111,10 +113,10 @@ export function useActiveSession() {
     return `${parts.join(" ")} — ${today}`;
   };
 
-  // Start Session: create new live session (or promote draft)
+  // Start Session: promote a draft, otherwise create a brand-new session.
+  // ENDED sessions are immutable history and are never revived.
   const startSession = useMutation({
     mutationFn: async () => {
-      // Check no live session exists
       let check = supabase
         .from("sessions" as any)
         .select("id")
@@ -126,40 +128,24 @@ export function useActiveSession() {
       } else {
         check = check.is("location_id", null);
       }
-      const { data: existing } = await (check as any).maybeSingle();
+      const { data: existing, error: checkError } = await (check as any).maybeSingle();
+      if (checkError) throw checkError;
       if (existing) throw new Error("A session is already live for this location.");
 
       if (activeSession?.status === "draft") {
-        // Promote draft to live
         const { error } = await supabase
           .from("sessions" as any)
           .update({
             status: "live",
             started_at: new Date().toISOString(),
             session_label: buildLabel(),
+            is_active: true,
           } as any)
           .eq("id", activeSession.id);
         if (error) throw error;
-      return activeSession.id;
-    }
-
-    // Promote ended session back to live (same-day restart)
-    if (activeSession?.status === "ended") {
-      const { error } = await supabase
-        .from("sessions" as any)
-        .update({
-          status: "live",
-          started_at: new Date().toISOString(),
-          ended_at: null,
-          is_active: true,
-          session_label: buildLabel(),
-        } as any)
-        .eq("id", activeSession.id);
-      if (error) throw error;
-      return activeSession.id;
+        return activeSession.id;
       }
 
-      // Create new live session
       const today = new Date().toISOString().split("T")[0];
       const { data, error } = await supabase
         .from("sessions" as any)
@@ -177,7 +163,7 @@ export function useActiveSession() {
         .single();
       if (error) throw error;
 
-      // Link session to session_config
+      // Link the current scope configuration to the new run.
       let configQuery = supabase
         .from("session_configs" as any)
         .select("id")
@@ -188,12 +174,14 @@ export function useActiveSession() {
       } else {
         configQuery = configQuery.is("location_id", null);
       }
-      const { data: config } = await (configQuery as any).maybeSingle();
+      const { data: config, error: configError } = await (configQuery as any).maybeSingle();
+      if (configError) throw configError;
       if (config) {
-        await supabase
+        const { error: linkError } = await supabase
           .from("session_configs" as any)
           .update({ session_id: (data as any).id } as any)
           .eq("id", (config as any).id);
+        if (linkError) throw linkError;
       }
 
       return (data as any).id;
@@ -208,7 +196,6 @@ export function useActiveSession() {
     },
   });
 
-  // End Session
   const endSession = useMutation({
     mutationFn: async () => {
       if (!activeSession || activeSession.status !== "live") {
@@ -225,6 +212,7 @@ export function useActiveSession() {
       if (error) throw error;
     },
     onSuccess: () => {
+      localStorage.removeItem("gp_session_id");
       invalidateSession();
       toast.success("Session ended. Data is archived.");
     },
@@ -233,7 +221,7 @@ export function useActiveSession() {
     },
   });
 
-  // Reset Session — wipes all data and resets to fresh state
+  // Reset Session is destructive for the current working session only.
   const resetSession = useMutation({
     mutationFn: async () => {
       if (!activeSession?.id) throw new Error("No active session to reset.");
