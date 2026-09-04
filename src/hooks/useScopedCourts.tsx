@@ -7,6 +7,7 @@ export interface ScopeKey {
   cityId: string;
   eventType: "social" | "thursdays";
   locationId: string | null;
+  sessionId: string | null;
 }
 
 interface SessionConfig {
@@ -17,6 +18,7 @@ interface SessionConfig {
   location_id: string | null;
   court_count: number;
   setup_completed: boolean;
+  session_id: string | null;
 }
 
 interface CourtUnit {
@@ -24,6 +26,7 @@ interface CourtUnit {
   city_id: string;
   event_type: "social" | "thursdays";
   location_id: string | null;
+  session_id: string | null;
   type: "court" | "group";
   court_number: number | null;
   group_court_numbers: number[] | null;
@@ -41,10 +44,10 @@ export interface RenderItem {
   type: "court" | "group";
   courtNumber?: number;
   courtNumbers?: number[];
-  unitId?: string;          // court_unit id
-  courtId?: number | null;  // linked courts.id
+  unitId?: string;
+  courtId?: number | null;
   formatType?: string;
-  courtGroupId?: string | null; // direct link to court_groups.id
+  courtGroupId?: string | null;
 }
 
 // ── Pure computation (shared logic) ────────────────────
@@ -58,7 +61,6 @@ export function computeRenderItems(
   const courtTypeUnits = courtUnits.filter((u) => u.type === "court");
   const groupTypeUnits = courtUnits.filter((u) => u.type === "group");
 
-  // Grouped court numbers (flattened from all groups)
   const groupedCourtNumbers = new Set<number>();
   const seenGroupNumbers = new Set<number>();
 
@@ -76,12 +78,10 @@ export function computeRenderItems(
     });
   });
 
-  // Ungrouped = court-type units whose court_number is in [1..N] and NOT in any group
   const ungroupedUnits = courtTypeUnits
     .filter((u) => u.court_number !== null && u.court_number <= N && !groupedCourtNumbers.has(u.court_number!))
     .sort((a, b) => (a.court_number || 0) - (b.court_number || 0));
 
-  // Groups sorted by min court number, filtering out-of-range numbers
   const sortedGroups = [...groupTypeUnits]
     .map((g) => ({
       ...g,
@@ -92,7 +92,6 @@ export function computeRenderItems(
 
   const items: RenderItem[] = [];
 
-  // 1. Ungrouped courts ascending
   ungroupedUnits.forEach((u) => {
     items.push({
       key: `court-${u.id}`,
@@ -105,7 +104,6 @@ export function computeRenderItems(
     });
   });
 
-  // 2. Groups
   sortedGroups.forEach((g) => {
     const nums = g.validNumbers.map(String);
     let label: string;
@@ -135,13 +133,11 @@ export function computeRenderItems(
 export function useScopedCourts() {
   const {
     selectedCityId,
-    selectedEventId,
     selectedLocationId,
     scopeEventType,
     isContextValid,
   } = useEventContext();
 
-  // 1. Fetch session_config
   const {
     data: sessionConfig,
     isLoading: configLoading,
@@ -165,18 +161,24 @@ export function useScopedCourts() {
       return data as unknown as SessionConfig | null;
     },
     enabled: isContextValid && !!scopeEventType,
-    refetchInterval: 10_000, // lightweight polling for cross-tab sync
+    refetchInterval: 10_000,
   });
 
-  // 2. Fetch court_units
+  const currentSessionId = sessionConfig?.session_id || null;
+
+  // court_units are event-run configuration and MUST be scoped to session_id.
+  // This prevents prior-session locks/groups from appearing in a new setup.
   const { data: courtUnits = [] } = useQuery({
-    queryKey: ["court_units", selectedCityId, scopeEventType, selectedLocationId],
+    queryKey: ["court_units", selectedCityId, scopeEventType, selectedLocationId, currentSessionId],
     queryFn: async () => {
+      if (!currentSessionId) return [] as CourtUnit[];
+
       let query = supabase
         .from("court_units" as any)
         .select("*")
         .eq("city_id", selectedCityId)
-        .eq("event_type", scopeEventType!);
+        .eq("event_type", scopeEventType!)
+        .eq("session_id", currentSessionId);
 
       if (selectedLocationId) {
         query = query.eq("location_id", selectedLocationId);
@@ -188,11 +190,10 @@ export function useScopedCourts() {
       if (error) throw error;
       return (data || []) as unknown as CourtUnit[];
     },
-    enabled: isContextValid && !!scopeEventType && !!sessionConfig?.setup_completed,
+    enabled: isContextValid && !!scopeEventType && !!sessionConfig?.setup_completed && !!currentSessionId,
     refetchInterval: 10_000,
   });
 
-  // 3. Compute render items
   const courtCount = sessionConfig?.court_count || 0;
   const setupCompleted = sessionConfig?.setup_completed === true;
   const { items: renderItems, warnings } = setupCompleted
@@ -211,6 +212,7 @@ export function useScopedCourts() {
       cityId: selectedCityId,
       eventType: scopeEventType,
       locationId: selectedLocationId,
+      sessionId: currentSessionId,
     } as ScopeKey,
   };
 }
