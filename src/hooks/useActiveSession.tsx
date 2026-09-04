@@ -53,6 +53,28 @@ export function useActiveSession() {
       if (liveError) throw liveError;
       if (liveData) return liveData as ActiveSession;
 
+      // Locally pinned session (draft or ended) wins over other drafts, as long as
+      // it still belongs to the current city/event/locality scope.
+      const pinnedId = localStorage.getItem("gp_session_id");
+      if (pinnedId) {
+        let pinnedQuery = supabase
+          .from("sessions" as any)
+          .select("*")
+          .eq("id", pinnedId)
+          .eq("city_id", selectedCityId)
+          .eq("event_type", scopeEventType!);
+        if (selectedLocationId) {
+          pinnedQuery = pinnedQuery.eq("location_id", selectedLocationId);
+        } else {
+          pinnedQuery = pinnedQuery.is("location_id", null);
+        }
+        const { data: pinnedData, error: pinnedError } = await (pinnedQuery as any).maybeSingle();
+        if (pinnedError) throw pinnedError;
+        if (pinnedData) return pinnedData as ActiveSession;
+      }
+
+
+
       let draftQuery = supabase
         .from("sessions" as any)
         .select("*")
@@ -241,9 +263,12 @@ export function useActiveSession() {
         } as any)
         .eq("id", activeSession.id);
       if (error) throw error;
+      return activeSession.id;
     },
-    onSuccess: () => {
-      localStorage.removeItem("gp_session_id");
+    onSuccess: (endedId) => {
+      // Keep the just-ended session pinned so the archive stays on screen.
+      if (endedId) localStorage.setItem("gp_session_id", endedId);
+
       invalidateSession();
       toast.success("Session ended. Data is archived.");
     },
