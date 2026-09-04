@@ -80,6 +80,7 @@ const SessionLifecycleControls = ({ setupCompleted }: SessionLifecycleControlsPr
   };
 
   const handleReset = () => {
+    if (isEnded) return;
     const expected = "RESET SESSION";
     if (resetPhrase.toUpperCase() !== expected) {
       toast.error(`Type "${expected}" to confirm`);
@@ -150,8 +151,26 @@ const SessionLifecycleControls = ({ setupCompleted }: SessionLifecycleControlsPr
           className="gap-1.5 h-8 text-xs text-muted-foreground"
         >
           <RotateCcw className="h-3 w-3" />
-          Reset
+          Reset Session
         </Button>
+      )}
+
+      {/* Reset Session (disabled for ended archives) */}
+      {isEnded && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled
+            className="gap-1.5 h-8 text-xs text-muted-foreground/50 cursor-not-allowed"
+          >
+            <RotateCcw className="h-3 w-3" />
+            Reset Session
+          </Button>
+          <span className="text-[11px] text-muted-foreground/60">
+            Archived sessions can’t be reset. Start a New Session to configure afresh.
+          </span>
+        </div>
       )}
 
       {/* Export (ended only) */}
