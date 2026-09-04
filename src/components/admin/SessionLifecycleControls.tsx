@@ -80,6 +80,7 @@ const SessionLifecycleControls = ({ setupCompleted }: SessionLifecycleControlsPr
   };
 
   const handleReset = () => {
+    if (isEnded) return;
     const expected = "RESET SESSION";
     if (resetPhrase.toUpperCase() !== expected) {
       toast.error(`Type "${expected}" to confirm`);
