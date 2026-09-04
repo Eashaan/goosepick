@@ -19,7 +19,7 @@ const PublicGroup = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { isContextValid, isLoading: contextLoading } = useEventContext();
-  const { activeSession, sessionLoading, sessionId } = useActiveSession();
+  const { sessionLoading, sessionId } = useActiveSession();
 
   // Redirect if no context
   useEffect(() => {
@@ -28,11 +28,11 @@ const PublicGroup = () => {
     }
   }, [contextLoading, isContextValid, navigate]);
 
-  // Fetch group details — resolve to the correct group for the active session
+  // Fetch group details — resolve the URL group to the equivalent group in the active session.
+  // IMPORTANT: all dependent reads must use group.id (the resolved id), not the stale URL id.
   const { data: group, isLoading: groupLoading } = useQuery({
     queryKey: ["court_group", groupId, sessionId],
     queryFn: async () => {
-      // First fetch the group by URL param
       const { data: urlGroup, error } = await supabase
         .from("court_groups")
         .select("*")
@@ -41,75 +41,83 @@ const PublicGroup = () => {
       if (error) throw error;
       if (!urlGroup) return null;
 
-      // If this group already belongs to the live session, use it directly
-      if (!sessionId || urlGroup.session_id === sessionId) return urlGroup;
+      // No session resolved yet: keep the URL group only while session resolution is unavailable.
+      if (!sessionId) return urlGroup;
 
-      // Otherwise, find the equivalent group for the live session
-      // (same session_config_id, same court_ids pattern)
-      const { data: liveGroup } = await supabase
+      // If the URL already points at the active-session group, use it directly.
+      if (urlGroup.session_id === sessionId) return urlGroup;
+
+      // Otherwise find the equivalent group in the active session.
+      const { data: sessionGroups, error: sessionGroupsError } = await supabase
         .from("court_groups")
         .select("*")
         .eq("session_config_id", urlGroup.session_config_id)
         .eq("session_id", sessionId);
+      if (sessionGroupsError) throw sessionGroupsError;
 
-      // Match by court_ids content
-      const match = liveGroup?.find(
-        (g: any) => JSON.stringify(g.court_ids?.sort()) === JSON.stringify(urlGroup.court_ids?.sort())
-      );
-      return match || urlGroup; // Fallback to original if no live equivalent
+      const sourceCourtIds = [...(urlGroup.court_ids || [])].sort((a: number, b: number) => a - b);
+      const match = sessionGroups?.find((candidate: any) => {
+        const candidateCourtIds = [...(candidate.court_ids || [])].sort((a: number, b: number) => a - b);
+        return JSON.stringify(candidateCourtIds) === JSON.stringify(sourceCourtIds);
+      });
+
+      // Never fall back to a group from another session. That is how stale/empty public rosters leaked in.
+      return match || null;
     },
     enabled: !!groupId && isContextValid && !sessionLoading,
   });
 
-  // Fetch players scoped to group AND session
+  const resolvedGroupId = group?.id ?? null;
+
+  // Fetch players scoped to the RESOLVED group and session.
   const { data: players = [] } = useQuery({
-    queryKey: ["group_players", groupId, sessionId],
+    queryKey: ["group_players", resolvedGroupId, sessionId],
     queryFn: async () => {
       let query = supabase
         .from("players")
         .select("*")
-        .eq("group_id", groupId!)
+        .eq("group_id", resolvedGroupId!)
         .order("created_at", { ascending: true });
       if (sessionId) query = query.eq("session_id", sessionId);
       const { data, error } = await query;
       if (error) throw error;
       return data;
     },
-    enabled: !!groupId && !!group && isContextValid,
+    enabled: !!resolvedGroupId && isContextValid,
   });
 
-  // Fetch matches scoped to group
+  // Fetch matches scoped to the RESOLVED group and session.
   const { data: matches = [] } = useQuery({
-    queryKey: ["group_matches", groupId, sessionId],
+    queryKey: ["group_matches", resolvedGroupId, sessionId],
     queryFn: async () => {
       let query = supabase
         .from("matches")
         .select("*")
-        .eq("group_id", groupId!)
+        .eq("group_id", resolvedGroupId!)
         .order("global_match_index", { ascending: true });
       if (sessionId) query = query.eq("session_id", sessionId);
       const { data, error } = await query;
       if (error) throw error;
       return data;
     },
-    enabled: !!groupId && !!group && isContextValid,
+    enabled: !!resolvedGroupId && isContextValid,
   });
 
-  // Fetch group court states
+  // Fetch group court states scoped to the RESOLVED group and session.
   const { data: courtStates = [] } = useQuery({
-    queryKey: ["group_court_state", groupId, sessionId],
+    queryKey: ["group_court_state", resolvedGroupId, sessionId],
     queryFn: async () => {
       let query = supabase
         .from("group_court_state")
         .select("*")
-        .eq("group_id", groupId!)
+        .eq("group_id", resolvedGroupId!)
         .order("court_number", { ascending: true });
       if (sessionId) query = query.eq("session_id", sessionId);
       const { data, error } = await query;
       if (error) throw error;
       return data;
     },
-    enabled: !!groupId && !!group && isContextValid,
+    enabled: !!resolvedGroupId && isContextValid,
   });
 
   // Build a synthetic court_id and courtState for PersonalRoster compatibility
@@ -119,13 +127,11 @@ const PublicGroup = () => {
   // Build a synthetic courtState from group court states for PersonalRoster nudge logic
   const syntheticCourtState = useMemo(() => {
     if (courtStates.length === 0) return undefined;
-    // Find first live court
     const liveState = courtStates.find(cs => cs.is_live);
     const currentGlobalIndex = liveState?.current_match_global_index ?? 0;
     const anyLive = courtStates.some(cs => cs.is_live);
     const allMatchesDone = matches.length > 0 && matches.every(m => m.status === "completed");
 
-    // Convert global index to 0-based round number
     const N = group?.court_ids?.length || 1;
     const currentRound = currentGlobalIndex > 0
       ? Math.floor((currentGlobalIndex - 1) / N)
@@ -140,46 +146,46 @@ const PublicGroup = () => {
     };
   }, [courtStates, matches, syntheticCourtId, group?.session_id, group?.court_ids?.length]);
 
-  // Realtime subscriptions
+  // Realtime subscriptions must also follow the resolved active-session group id.
   useEffect(() => {
-    if (!groupId || !isContextValid) return;
+    if (!resolvedGroupId || !isContextValid) return;
 
     const channel = supabase
-      .channel(`group-${groupId}`)
+      .channel(`group-${resolvedGroupId}-${sessionId || "no-session"}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "group_court_state", filter: `group_id=eq.${groupId}` },
-        () => queryClient.invalidateQueries({ queryKey: ["group_court_state", groupId, sessionId] })
+        { event: "*", schema: "public", table: "group_court_state", filter: `group_id=eq.${resolvedGroupId}` },
+        () => queryClient.invalidateQueries({ queryKey: ["group_court_state", resolvedGroupId, sessionId] })
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "matches", filter: `group_id=eq.${groupId}` },
-        () => queryClient.invalidateQueries({ queryKey: ["group_matches", groupId, sessionId] })
+        { event: "*", schema: "public", table: "matches", filter: `group_id=eq.${resolvedGroupId}` },
+        () => queryClient.invalidateQueries({ queryKey: ["group_matches", resolvedGroupId, sessionId] })
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "players", filter: `group_id=eq.${groupId}` },
-        () => queryClient.invalidateQueries({ queryKey: ["group_players", groupId, sessionId] })
+        { event: "*", schema: "public", table: "players", filter: `group_id=eq.${resolvedGroupId}` },
+        () => queryClient.invalidateQueries({ queryKey: ["group_players", resolvedGroupId, sessionId] })
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [groupId, queryClient, isContextValid, sessionId]);
+  }, [resolvedGroupId, queryClient, isContextValid, sessionId]);
 
-  // Fetch court_units to get display court numbers for this group
+  // Fetch court_units to get display court numbers for this resolved group
   const { data: groupCourtUnit } = useQuery({
-    queryKey: ["court_unit_for_group", group?.id],
+    queryKey: ["court_unit_for_group", resolvedGroupId],
     queryFn: async () => {
       const { data } = await supabase
         .from("court_units" as any)
         .select("group_court_numbers")
-        .eq("court_group_id", group!.id)
+        .eq("court_group_id", resolvedGroupId!)
         .maybeSingle();
       return data as unknown as { group_court_numbers: number[] | null } | null;
     },
-    enabled: !!group?.id,
+    enabled: !!resolvedGroupId,
   });
 
   // Derive display name from court_units group_court_numbers (display numbers), not court_groups.court_ids (DB PKs)
@@ -220,7 +226,6 @@ const PublicGroup = () => {
       <div className="min-h-screen flex flex-col">
         <GlobalHeader />
 
-        {/* Group Title */}
         <div className="px-4 py-3 flex items-center gap-3 border-b border-border">
           <Button asChild variant="ghost" size="icon" className="shrink-0">
             <Link to="/public">
@@ -230,7 +235,6 @@ const PublicGroup = () => {
           <h1 className="text-lg font-semibold">{groupLabel}</h1>
         </div>
 
-        {/* Multi-Court Pulse */}
         <GroupCourtPulse
           courtStates={courtStates}
           matches={matches}
@@ -239,7 +243,6 @@ const PublicGroup = () => {
           courtIds={group.court_ids}
         />
 
-        {/* Tabs */}
         <Tabs defaultValue="personal" className="flex-1 flex flex-col">
           <TabsList className="sticky top-0 z-10 mx-4 bg-secondary rounded-xl h-12">
             <TabsTrigger value="personal" className="flex-1 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
@@ -270,7 +273,6 @@ const PublicGroup = () => {
           </TabsContent>
         </Tabs>
 
-        {/* Footer */}
         <div className="py-4 text-center border-t border-border">
           <p className="text-xs text-muted-foreground">
             <GroupFooterText />
