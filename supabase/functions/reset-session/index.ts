@@ -63,10 +63,10 @@ serve(async (req) => {
       );
     }
 
-    // Validate that the session being reset belongs to the selected scope.
+    // Validate that the session being reset belongs to the selected scope and is mutable.
     let sessionQuery = supabase
       .from("sessions")
-      .select("id")
+      .select("id, status")
       .eq("id", sessionId)
       .eq("city_id", cityId)
       .eq("event_type", eventType);
@@ -76,6 +76,9 @@ serve(async (req) => {
     const { data: scopedSession, error: scopedSessionError } = await sessionQuery.maybeSingle();
     assertNoError("Session validation failed", scopedSessionError);
     if (!scopedSession) throw new Error("Reset scope does not match the selected session.");
+    if (scopedSession.status === "ended") {
+      throw new Error("Ended sessions are archived and cannot be reset.");
+    }
 
     // Find the setup record owned by this exact session.
     const { data: config, error: configError } = await supabase
@@ -108,27 +111,26 @@ serve(async (req) => {
     result = await supabase.from("players").delete().eq("session_id", sessionId);
     assertNoError("Deleting players failed", result.error);
 
-    // IMPORTANT: do not delete every group sharing session_config_id. That would
-    // destroy archived group definitions from prior sessions. Only this run's groups go.
     result = await supabase.from("court_groups").delete().eq("session_id", sessionId);
     assertNoError("Deleting court groups failed", result.error);
 
-    // Court units are owned by this session; never clear another run's setup.
     const { error: unitDeleteError } = await supabase
       .from("court_units")
       .delete()
       .eq("session_id", sessionId);
     assertNoError("Deleting court units failed", unitDeleteError);
 
+    // Keep the config bound to this same draft session so the wizard reuses the
+    // row instead of orphaning it and creating a duplicate configuration.
     if (config) {
       const { error: configResetError } = await supabase
         .from("session_configs")
-        .update({ setup_completed: false, session_id: null })
-        .eq("id", config.id);
+        .update({ setup_completed: false })
+        .eq("id", config.id)
+        .eq("session_id", sessionId);
       assertNoError("Resetting session configuration failed", configResetError);
     }
 
-    // Session-scoped court state is disposable setup/runtime state.
     const { error: stateResetError } = await supabase
       .from("court_state")
       .delete()
