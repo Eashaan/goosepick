@@ -128,19 +128,20 @@ export function useScopedCourts() {
   const { activeSession, sessionLoading } = useActiveSession();
 
   // Only draft/live sessions own mutable setup. Ended sessions are archive-only.
+  const displaySessionId = activeSession?.id || null;
   const workingSessionId =
     activeSession && (activeSession.status === "draft" || activeSession.status === "live")
       ? activeSession.id
       : null;
 
   const { data: sessionConfig, isLoading: configLoading } = useQuery({
-    queryKey: ["session_config", workingSessionId],
+    queryKey: ["session_config", displaySessionId],
     queryFn: async () => {
-      if (!workingSessionId) return null;
+      if (!displaySessionId) return null;
       const { data, error } = await supabase
         .from("session_configs" as any)
         .select("*")
-        .eq("session_id", workingSessionId)
+        .eq("session_id", displaySessionId)
         .maybeSingle();
       if (error) throw error;
       return data as unknown as SessionConfig | null;
@@ -150,18 +151,18 @@ export function useScopedCourts() {
   });
 
   const { data: courtUnits = [] } = useQuery({
-    queryKey: ["court_units", workingSessionId],
+    queryKey: ["court_units", displaySessionId],
     queryFn: async () => {
-      if (!workingSessionId) return [];
+      if (!displaySessionId) return [];
       const { data, error } = await supabase
         .from("court_units" as any)
         .select("*")
-        .eq("session_id", workingSessionId)
+        .eq("session_id", displaySessionId)
         .order("court_number", { nullsFirst: false });
       if (error) throw error;
       return (data || []) as unknown as CourtUnit[];
     },
-    enabled: isContextValid && !!workingSessionId && !!sessionConfig?.setup_completed,
+    enabled: isContextValid && !!displaySessionId && !!sessionConfig?.setup_completed,
     refetchInterval: 10_000,
   });
 
@@ -180,6 +181,7 @@ export function useScopedCourts() {
     renderItems,
     warnings,
     workingSessionId,
+    displaySessionId,
     scopeKey: {
       cityId: selectedCityId,
       eventType: scopeEventType,

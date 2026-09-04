@@ -35,19 +35,21 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
   const [showRankPopup, setShowRankPopup] = useState(false);
   const [showPodiumSummary, setShowPodiumSummary] = useState(false);
   const [showAutoStatsCard, setShowAutoStatsCard] = useState(false);
+  const sessionKey = courtState?.session_id || matches.find(m => m.session_id)?.session_id || "no-session";
+  const storagePrefix = `gp_${sessionKey}_${groupId || `court-${courtId}`}`;
 
   // Load saved player from localStorage
   useEffect(() => {
-    const savedId = localStorage.getItem(`gp_person_${courtId}`);
+    const savedId = localStorage.getItem(`${storagePrefix}_person`);
     if (savedId && players.find(p => p.id === savedId)) {
       setSelectedPlayerId(savedId);
     }
-  }, [courtId, players]);
+  }, [storagePrefix, players]);
 
   // Save selected player to localStorage
   const handlePlayerSelect = (playerId: string) => {
     setSelectedPlayerId(playerId);
-    localStorage.setItem(`gp_person_${courtId}`, playerId);
+    localStorage.setItem(`${storagePrefix}_person`, playerId);
   };
 
   // Get player's matches
@@ -209,7 +211,7 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
       if (!hasCompletedAllMatches || !selectedPlayerId || feedbackSubmitted) return;
       
       // Check if feedback already submitted
-      const submitted = localStorage.getItem(`gp_feedback_${courtId}_${selectedPlayerId}`);
+      const submitted = localStorage.getItem(`${storagePrefix}_feedback_${selectedPlayerId}`);
       if (submitted) {
         setFeedbackSubmitted(true);
         return;
@@ -220,14 +222,14 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
     };
     
     checkFeedback();
-  }, [hasCompletedAllMatches, selectedPlayerId, courtId, feedbackSubmitted]);
+  }, [hasCompletedAllMatches, selectedPlayerId, storagePrefix, feedbackSubmitted]);
 
   // Trigger rank popup for selected player when they complete all matches
   useEffect(() => {
     if (!hasCompletedAllMatches || !selectedPlayerId || playerRank === 0) return;
 
     // Check if rank popup already shown for this player
-    const shownKey = `gp_rank_popup_${courtId}_${selectedPlayerId}`;
+    const shownKey = `${storagePrefix}_rank_popup_${selectedPlayerId}`;
     const alreadyShown = localStorage.getItem(shownKey);
     if (alreadyShown) return;
 
@@ -239,7 +241,7 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [hasCompletedAllMatches, selectedPlayerId, playerRank, courtId, showFeedback]);
+  }, [hasCompletedAllMatches, selectedPlayerId, playerRank, storagePrefix, showFeedback]);
 
   // Show rank popup after feedback is dismissed
   useEffect(() => {
@@ -250,24 +252,24 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
         setShowRankPopup(true);
       }
     }
-  }, [feedbackSubmitted, hasCompletedAllMatches, selectedPlayerId, playerRank, courtId, showFeedback]);
+  }, [feedbackSubmitted, hasCompletedAllMatches, selectedPlayerId, playerRank, storagePrefix, showFeedback]);
 
   // Fallback: Show podium summary when no player selected but all have at least 1 match
   useEffect(() => {
     if (selectedPlayerId) return; // Only for anonymous viewers
     if (!allPlayersHaveMatches || players.length === 0) return;
 
-    const shownKey = `gp_podium_shown_${courtId}`;
+    const shownKey = `${storagePrefix}_podium_shown`;
     const alreadyShown = localStorage.getItem(shownKey);
     if (alreadyShown) return;
 
     setShowPodiumSummary(true);
-  }, [selectedPlayerId, allPlayersHaveMatches, courtId, players.length]);
+  }, [selectedPlayerId, allPlayersHaveMatches, storagePrefix, players.length]);
 
   const handleRankPopupClose = () => {
     setShowRankPopup(false);
     if (selectedPlayerId) {
-      localStorage.setItem(`gp_rank_popup_${courtId}_${selectedPlayerId}`, "true");
+      localStorage.setItem(`${storagePrefix}_rank_popup_${selectedPlayerId}`, "true");
     }
     // After rank popup closes, show auto stats card
     setShowAutoStatsCard(true);
@@ -275,7 +277,7 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
 
   const handlePodiumSummaryClose = () => {
     setShowPodiumSummary(false);
-    localStorage.setItem(`gp_podium_shown_${courtId}`, "true");
+    localStorage.setItem(`${storagePrefix}_podium_shown`, "true");
   };
 
   const nudge = getNudgeMessage();
@@ -324,7 +326,7 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
         <button
           onClick={() => {
             setSelectedPlayerId(null);
-            localStorage.removeItem(`gp_person_${courtId}`);
+            localStorage.removeItem(`${storagePrefix}_person`);
           }}
           className="text-primary underline text-sm font-medium hover:text-primary/80 transition-colors"
         >
@@ -420,10 +422,11 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
         onOpenChange={setShowFeedback}
         courtId={courtId}
         playerId={selectedPlayerId}
+        sessionId={sessionKey}
         groupId={groupId}
         onSubmitted={() => {
           setFeedbackSubmitted(true);
-          localStorage.setItem(`gp_feedback_${courtId}_${selectedPlayerId}`, "true");
+          localStorage.setItem(`${storagePrefix}_feedback_${selectedPlayerId}`, "true");
         }}
       />
 

@@ -196,6 +196,37 @@ export function useActiveSession() {
     },
   });
 
+  const newSession = useMutation({
+    mutationFn: async () => {
+      const today = new Date().toISOString().split("T")[0];
+      const { data, error } = await supabase
+        .from("sessions" as any)
+        .insert({
+          city_id: selectedCityId,
+          event_type: scopeEventType,
+          location_id: selectedLocationId,
+          date: today,
+          is_active: false,
+          status: "draft",
+          session_label: null,
+        } as any)
+        .select("id")
+        .single();
+      if (error) throw error;
+      return (data as any).id as string;
+    },
+    onSuccess: (sessionId) => {
+      localStorage.setItem("gp_session_id", sessionId);
+      invalidateSession();
+      queryClient.invalidateQueries({ queryKey: ["session_config"] });
+      queryClient.invalidateQueries({ queryKey: ["court_units"] });
+      toast.success("New session created. Configure the courts for this run.");
+    },
+    onError: (err: Error) => {
+      toast.error(err.message);
+    },
+  });
+
   const endSession = useMutation({
     mutationFn: async () => {
       if (!activeSession || activeSession.status !== "live") {
@@ -264,6 +295,7 @@ export function useActiveSession() {
     isEnded: activeSession?.status === "ended",
     isDraft: activeSession?.status === "draft",
     startSession,
+    newSession,
     endSession,
     resetSession,
     invalidateSession,

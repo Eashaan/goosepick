@@ -339,7 +339,7 @@ const AdminDashboard = () => {
               )}
             </div>
             {user && <AdminManagement currentUserId={user.id} />}
-            {setupCompleted && !showEditSetup && (
+            {setupCompleted && !showEditSetup && !isEnded && (
               <Button variant="ghost" size="icon" onClick={() => setShowEditSetup(true)}>
                 <Settings className="h-5 w-5" />
               </Button>
