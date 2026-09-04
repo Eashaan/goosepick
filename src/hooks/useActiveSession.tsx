@@ -263,9 +263,12 @@ export function useActiveSession() {
         } as any)
         .eq("id", activeSession.id);
       if (error) throw error;
+      return activeSession.id;
     },
-    onSuccess: () => {
-      localStorage.removeItem("gp_session_id");
+    onSuccess: (endedId) => {
+      // Keep the just-ended session pinned so the archive stays on screen.
+      if (endedId) localStorage.setItem("gp_session_id", endedId);
+
       invalidateSession();
       toast.success("Session ended. Data is archived.");
     },
