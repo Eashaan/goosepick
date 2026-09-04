@@ -8,29 +8,30 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_session_id uuid;
-  v_status public.session_status;
+  v_old_session_id uuid;
+  v_new_session_id uuid;
 BEGIN
-  IF TG_OP = 'DELETE' THEN
-    v_session_id := OLD.session_id;
-  ELSE
-    v_session_id := NEW.session_id;
+  IF TG_OP IN ('UPDATE', 'DELETE') THEN
+    v_old_session_id := OLD.session_id;
+  END IF;
+  IF TG_OP IN ('INSERT', 'UPDATE') THEN
+    v_new_session_id := NEW.session_id;
   END IF;
 
-  -- Legacy/unbound rows are left alone. All current-session writes are expected
-  -- to carry session_id after Foundation Repair 2.
-  IF v_session_id IS NULL THEN
-    IF TG_OP = 'DELETE' THEN
-      RETURN OLD;
-    END IF;
-    RETURN NEW;
+  -- Protect the old ownership too, so an archived row cannot be made mutable by
+  -- reassigning or nulling its session_id.
+  IF v_old_session_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM public.sessions
+    WHERE id = v_old_session_id AND status = 'ended'
+  ) THEN
+    RAISE EXCEPTION 'Ended sessions are archived and cannot be modified.'
+      USING ERRCODE = '55000';
   END IF;
 
-  SELECT status INTO v_status
-  FROM public.sessions
-  WHERE id = v_session_id;
-
-  IF v_status = 'ended' THEN
+  IF v_new_session_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM public.sessions
+    WHERE id = v_new_session_id AND status = 'ended'
+  ) THEN
     RAISE EXCEPTION 'Ended sessions are archived and cannot be modified.'
       USING ERRCODE = '55000';
   END IF;
