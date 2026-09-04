@@ -100,6 +100,7 @@ serve(async (req) => {
       .from("court_units")
       .select("id, court_number")
       .eq("court_id", courtId)
+      .eq("session_id", sessionId)
       .eq("city_id", cityId)
       .eq("event_type", eventType);
     unitQuery = locationId
@@ -159,6 +160,7 @@ serve(async (req) => {
       let unitUpdate = supabase.from("court_units")
         .update({ is_locked: false })
         .eq("id", unitData.id)
+        .eq("session_id", sessionId)
         .eq("city_id", cityId)
         .eq("event_type", eventType);
       unitUpdate = locationId

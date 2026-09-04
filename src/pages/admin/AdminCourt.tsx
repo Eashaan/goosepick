@@ -360,7 +360,9 @@ const AdminCourt = () => {
       const matchToStart = getMatchToStart();
       if (!matchToStart) throw new Error("No match to start");
 
+      if (!activeSessionId) throw new Error("No active session found");
       const { data, error } = await supabase.rpc("start_match_atomic" as any, {
+        p_session_id: activeSessionId,
         p_court_id: courtNumber,
         p_match_id: matchToStart.id,
         p_match_index: matchToStart.match_index,
@@ -395,7 +397,9 @@ const AdminCourt = () => {
 
       const wasOverride = overrideMatchId !== null;
 
+      if (!activeSessionId) throw new Error("No active session found");
       const { data, error } = await supabase.rpc("end_match_atomic" as any, {
+        p_session_id: activeSessionId,
         p_court_id: courtNumber,
         p_match_id: currentMatch.id,
         p_team1_score: team1Score,

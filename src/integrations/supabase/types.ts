@@ -96,6 +96,7 @@ export type Database = {
         Row: {
           court_id: number
           current_match_index: number
+          id: string
           phase: Database["public"]["Enums"]["court_phase"]
           session_id: string | null
           updated_at: string
@@ -103,6 +104,7 @@ export type Database = {
         Insert: {
           court_id: number
           current_match_index?: number
+          id?: string
           phase?: Database["public"]["Enums"]["court_phase"]
           session_id?: string | null
           updated_at?: string
@@ -110,6 +112,7 @@ export type Database = {
         Update: {
           court_id?: number
           current_match_index?: number
+          id?: string
           phase?: Database["public"]["Enums"]["court_phase"]
           session_id?: string | null
           updated_at?: string
@@ -145,6 +148,7 @@ export type Database = {
           id: string
           is_locked: boolean
           location_id: string | null
+          session_id: string | null
           type: string
           updated_at: string
         }
@@ -161,6 +165,7 @@ export type Database = {
           id?: string
           is_locked?: boolean
           location_id?: string | null
+          session_id?: string | null
           type: string
           updated_at?: string
         }
@@ -177,6 +182,7 @@ export type Database = {
           id?: string
           is_locked?: boolean
           location_id?: string | null
+          session_id?: string | null
           type?: string
           updated_at?: string
         }
@@ -207,6 +213,13 @@ export type Database = {
             columns: ["location_id"]
             isOneToOne: false
             referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "court_units_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
             referencedColumns: ["id"]
           },
         ]
@@ -955,6 +968,7 @@ export type Database = {
         Args: {
           p_court_id: number
           p_is_override?: boolean
+          p_session_id: string
           p_match_id: string
           p_team1_score: number
           p_team2_score: number
@@ -970,7 +984,7 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       start_match_atomic: {
-        Args: { p_court_id: number; p_match_id: string; p_match_index: number }
+        Args: { p_court_id: number; p_match_id: string; p_match_index: number; p_session_id: string }
         Returns: Json
       }
     }

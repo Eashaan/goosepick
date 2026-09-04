@@ -63,10 +63,10 @@ serve(async (req) => {
       );
     }
 
-    // Validate that the session being reset belongs to the selected scope.
+    // Validate that the session being reset belongs to the selected scope and is mutable.
     let sessionQuery = supabase
       .from("sessions")
-      .select("id")
+      .select("id, status")
       .eq("id", sessionId)
       .eq("city_id", cityId)
       .eq("event_type", eventType);
@@ -76,17 +76,16 @@ serve(async (req) => {
     const { data: scopedSession, error: scopedSessionError } = await sessionQuery.maybeSingle();
     assertNoError("Session validation failed", scopedSessionError);
     if (!scopedSession) throw new Error("Reset scope does not match the selected session.");
+    if (scopedSession.status === "ended") {
+      throw new Error("Ended sessions are archived and cannot be reset.");
+    }
 
-    // Find the singleton setup record for this city/event/location scope.
-    let configQuery = supabase
+    // Find the setup record owned by this exact session.
+    const { data: config, error: configError } = await supabase
       .from("session_configs")
       .select("id, session_id")
-      .eq("city_id", cityId)
-      .eq("event_type", eventType);
-    configQuery = locationId
-      ? configQuery.eq("location_id", locationId)
-      : configQuery.is("location_id", null);
-    const { data: config, error: configError } = await configQuery.maybeSingle();
+      .eq("session_id", sessionId)
+      .maybeSingle();
     assertNoError("Session config lookup failed", configError);
 
     // Delete only operational rows tagged to THIS session. Every mutation is
@@ -112,44 +111,29 @@ serve(async (req) => {
     result = await supabase.from("players").delete().eq("session_id", sessionId);
     assertNoError("Deleting players failed", result.error);
 
-    // IMPORTANT: do not delete every group sharing session_config_id. That would
-    // destroy archived group definitions from prior sessions. Only this run's groups go.
     result = await supabase.from("court_groups").delete().eq("session_id", sessionId);
     assertNoError("Deleting court groups failed", result.error);
 
-    // court_units are still a legacy scope-level setup table (no session_id yet),
-    // so a destructive Reset Session must clear the selected scope to remove stale
-    // locks/group cards before rebuilding the wizard.
-    let unitDelete = supabase
+    const { error: unitDeleteError } = await supabase
       .from("court_units")
       .delete()
-      .eq("city_id", cityId)
-      .eq("event_type", eventType);
-    unitDelete = locationId
-      ? unitDelete.eq("location_id", locationId)
-      : unitDelete.is("location_id", null);
-    const { error: unitDeleteError } = await unitDelete;
+      .eq("session_id", sessionId);
     assertNoError("Deleting court units failed", unitDeleteError);
 
+    // Keep the config bound to this same draft session so the wizard reuses the
+    // row instead of orphaning it and creating a duplicate configuration.
     if (config) {
       const { error: configResetError } = await supabase
         .from("session_configs")
-        .update({ setup_completed: false, session_id: null })
-        .eq("id", config.id);
+        .update({ setup_completed: false })
+        .eq("id", config.id)
+        .eq("session_id", sessionId);
       assertNoError("Resetting session configuration failed", configResetError);
     }
 
-    // Clear transient state rows that are currently bound to this session. These
-    // are legacy one-row-per-court records, so unbind them rather than deleting
-    // the reusable physical court definitions.
     const { error: stateResetError } = await supabase
       .from("court_state")
-      .update({
-        session_id: null,
-        current_match_index: 0,
-        phase: "idle",
-        updated_at: new Date().toISOString(),
-      })
+      .delete()
       .eq("session_id", sessionId);
     assertNoError("Resetting court state failed", stateResetError);
 

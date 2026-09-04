@@ -44,6 +44,7 @@ const SessionLifecycleControls = ({ setupCompleted }: SessionLifecycleControlsPr
     isEnded,
     isDraft,
     startSession,
+    newSession,
     endSession,
     resetSession,
   } = useActiveSession();
@@ -101,7 +102,7 @@ const SessionLifecycleControls = ({ setupCompleted }: SessionLifecycleControlsPr
       )}
 
       {/* Start Session */}
-      {(!activeSession || isDraft || isEnded) && setupCompleted && (
+      {(!activeSession || isDraft) && setupCompleted && (
         <Button
           size="sm"
           onClick={() => startSession.mutate()}
@@ -110,6 +111,18 @@ const SessionLifecycleControls = ({ setupCompleted }: SessionLifecycleControlsPr
         >
           <Play className="h-3 w-3" />
           Start Session
+        </Button>
+      )}
+
+      {isEnded && (
+        <Button
+          size="sm"
+          onClick={() => newSession.mutate()}
+          disabled={newSession.isPending}
+          className="gap-1.5 h-8 text-xs"
+        >
+          <Play className="h-3 w-3" />
+          New Session
         </Button>
       )}
 
@@ -128,7 +141,7 @@ const SessionLifecycleControls = ({ setupCompleted }: SessionLifecycleControlsPr
       )}
 
       {/* Reset Session */}
-      {(isDraft || isEnded || isLive) && (
+      {(isDraft || isLive) && (
         <Button
           size="sm"
           variant="ghost"

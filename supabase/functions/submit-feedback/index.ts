@@ -11,12 +11,12 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { court_id, player_id, rating, note, group_id } = await req.json();
+    const { court_id, player_id, session_id, rating, note, group_id } = await req.json();
 
     // Validate required fields
-    if (!court_id || !player_id || !rating) {
+    if (!court_id || !player_id || !session_id || !rating) {
       return new Response(
-        JSON.stringify({ ok: false, error: 'Missing required fields: court_id, player_id, rating' }),
+        JSON.stringify({ ok: false, error: 'Missing required fields: court_id, player_id, session_id, rating' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -50,13 +50,20 @@ Deno.serve(async (req) => {
     // Verify player exists
     const { data: player, error: playerError } = await supabase
       .from('players')
-      .select('id, court_id, group_id')
+      .select('id, court_id, group_id, session_id')
       .eq('id', player_id)
       .single();
 
     if (playerError || !player) {
       return new Response(
         JSON.stringify({ ok: false, error: 'Player not found' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (player.session_id !== session_id) {
+      return new Response(
+        JSON.stringify({ ok: false, error: 'Player does not belong to this session' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -68,8 +75,9 @@ Deno.serve(async (req) => {
       // Group player — verify the group contains this court_id
       const { data: group, error: groupError } = await supabase
         .from('court_groups')
-        .select('court_ids')
+        .select('court_ids, session_id')
         .eq('id', group_id)
+        .eq('session_id', session_id)
         .single();
 
       if (groupError || !group || !group.court_ids?.includes(court_id)) {
@@ -91,11 +99,12 @@ Deno.serve(async (req) => {
         {
           court_id,
           player_id,
+          session_id,
           rating,
           note: note?.trim() || null,
         },
         {
-          onConflict: 'court_id,player_id',
+          onConflict: 'session_id,court_id,player_id',
           ignoreDuplicates: true,
         }
       )

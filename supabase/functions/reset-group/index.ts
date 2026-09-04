@@ -103,6 +103,13 @@ serve(async (req) => {
       .eq("session_id", sessionId);
     assertNoError("Unlocking group failed", unlockError);
 
+    const { error: unitUnlockError } = await supabase
+      .from("court_units")
+      .update({ is_locked: false })
+      .eq("session_id", sessionId)
+      .eq("court_group_id", groupId);
+    assertNoError("Unlocking group court unit failed", unitUnlockError);
+
     return new Response(JSON.stringify({ ok: true, message: "Group reset successfully" }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
