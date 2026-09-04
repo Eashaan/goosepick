@@ -5,6 +5,7 @@ on:
     branches: [codex/foundation-repair-2]
     paths:
       - scripts/foundation_repair_2_patch.py
+      - scripts/foundation_repair_2_trigger.txt
 
 permissions:
   contents: write
