@@ -138,13 +138,14 @@ const PublicGroup = () => {
       : 0;
 
     return {
+      id: `synthetic-${resolvedGroupId ?? "group"}`,
       court_id: syntheticCourtId,
       current_match_index: currentRound,
       phase: allMatchesDone ? "completed" as const : anyLive ? "in_progress" as const : "idle" as const,
       session_id: group?.session_id ?? null,
       updated_at: new Date().toISOString(),
     };
-  }, [courtStates, matches, syntheticCourtId, group?.session_id, group?.court_ids?.length]);
+  }, [courtStates, matches, resolvedGroupId, syntheticCourtId, group?.session_id, group?.court_ids?.length]);
 
   // Realtime subscriptions must also follow the resolved active-session group id.
   useEffect(() => {
