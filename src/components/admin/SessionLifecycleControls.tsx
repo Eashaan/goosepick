@@ -128,7 +128,7 @@ const SessionLifecycleControls = ({ setupCompleted }: SessionLifecycleControlsPr
       )}
 
       {/* Reset Session */}
-      {(isDraft || isEnded || isLive) && (
+      {(isDraft || isLive) && (
         <Button
           size="sm"
           variant="ghost"

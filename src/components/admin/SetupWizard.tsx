@@ -176,7 +176,10 @@ const SetupWizard = ({
         .eq("city_id", cityId)
         .eq("event_type", scopeEventType)
         .eq("date", today)
-        .in("status", ["draft", "live"]);
+        .in("status", ["draft", "live"])
+        .order("status", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(1);
       if (locationId) {
         sessionQuery = sessionQuery.eq("location_id", locationId);
       } else {
@@ -220,7 +223,8 @@ const SetupWizard = ({
           .from("courts")
           .select("id")
           .eq("event_id", eventId)
-          .eq("name", `Court ${i}`);
+          .eq("name", `Court ${i}`)
+          .eq("session_id", activeSessionId);
         if (locationId) {
           courtLookup = courtLookup.eq("location_id", locationId);
         } else {
@@ -241,6 +245,7 @@ const SetupWizard = ({
               event_id: eventId,
               location_id: locationId || null,
               format_type: finalFormat,
+              session_id: activeSessionId,
             } as any);
         }
       }
@@ -249,7 +254,8 @@ const SetupWizard = ({
       let courtStateQuery = supabase
         .from("courts")
         .select("id")
-        .eq("event_id", eventId);
+        .eq("event_id", eventId)
+        .eq("session_id", activeSessionId);
       if (locationId) {
         courtStateQuery = courtStateQuery.eq("location_id", locationId);
       } else {
@@ -263,10 +269,11 @@ const SetupWizard = ({
             .from("court_state")
             .select("court_id")
             .eq("court_id", court.id)
+            .eq("session_id", activeSessionId)
             .maybeSingle();
 
           if (!existingState) {
-            await supabase.from("court_state").insert({ court_id: court.id } as any);
+            await supabase.from("court_state").insert({ court_id: court.id, session_id: activeSessionId } as any);
           }
         }
       }
@@ -282,6 +289,7 @@ const SetupWizard = ({
             .select("id")
             .eq("event_id", eventId)
             .eq("name", `Court ${n}`)
+            .eq("session_id", activeSessionId)
             .maybeSingle();
           if (c) courtIds.push(c.id);
         }
@@ -303,6 +311,7 @@ const SetupWizard = ({
         .delete()
         .eq("city_id", cityId)
         .eq("event_type", scopeEventType)
+        .eq("session_id", activeSessionId)
         .eq("is_locked", false);
       if (locationId) {
         deleteQuery = deleteQuery.eq("location_id", locationId);
@@ -315,7 +324,8 @@ const SetupWizard = ({
       let courtsFetch = supabase
         .from("courts")
         .select("id, name")
-        .eq("event_id", eventId);
+        .eq("event_id", eventId)
+        .eq("session_id", activeSessionId);
       if (locationId) {
         courtsFetch = courtsFetch.eq("location_id", locationId);
       } else {
@@ -339,6 +349,7 @@ const SetupWizard = ({
           .select("id")
           .eq("city_id", cityId)
           .eq("event_type", scopeEventType)
+          .eq("session_id", activeSessionId)
           .eq("type", "court")
           .eq("court_number", i)
           .eq("is_locked", true);
@@ -354,6 +365,7 @@ const SetupWizard = ({
             city_id: cityId,
             event_type: scopeEventType,
             location_id: locationId,
+            session_id: activeSessionId,
             type: "court",
             court_number: i,
             display_name: `Court ${i}`,
@@ -380,32 +392,13 @@ const SetupWizard = ({
           city_id: cityId,
           event_type: scopeEventType,
           location_id: locationId,
+          session_id: activeSessionId,
           type: "group",
           group_court_numbers: nums,
           display_name: displayName,
           format_type: g.formatType,
           court_group_id: groupIdMap.get(gi) || null,
         } as any);
-      }
-
-      // 6. Link all courts to this session
-      let courtsToLink = supabase
-        .from("courts")
-        .select("id")
-        .eq("event_id", eventId);
-      if (locationId) {
-        courtsToLink = courtsToLink.eq("location_id", locationId);
-      } else {
-        courtsToLink = courtsToLink.is("location_id", null);
-      }
-      const { data: courtsToLinkData } = await courtsToLink;
-      if (courtsToLinkData) {
-        for (const court of courtsToLinkData) {
-          await supabase
-            .from("courts")
-            .update({ session_id: activeSessionId } as any)
-            .eq("id", (court as any).id);
-        }
       }
 
       return activeSessionId;

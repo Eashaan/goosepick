@@ -108,86 +108,120 @@ serve(async (req) => {
   }
 
   try {
-    // Authentication check
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return new Response(
-        JSON.stringify({ ok: false, error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    
     const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
+      global: { headers: { Authorization: authHeader } },
     });
-
-    const token = authHeader.replace('Bearer ', '');
+    const token = authHeader.replace("Bearer ", "");
     const { data: claims, error: claimsError } = await userSupabase.auth.getClaims(token);
-    
     if (claimsError || !claims?.claims?.sub) {
-      console.error("Auth error:", claimsError);
-      return new Response(
-        JSON.stringify({ ok: false, error: "Invalid authentication" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ ok: false, error: "Invalid authentication" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const userId = claims.claims.sub;
-    const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey);
-    
-    const { data: roleData, error: roleError } = await serviceSupabase
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const { data: roleData, error: roleError } = await supabase
       .from("user_roles")
       .select("role")
-      .eq("user_id", userId)
+      .eq("user_id", claims.claims.sub)
       .eq("role", "admin")
       .maybeSingle();
-
     if (roleError || !roleData) {
-      console.error("Role check error:", roleError);
-      return new Response(
-        JSON.stringify({ ok: false, error: "Insufficient permissions" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ ok: false, error: "Insufficient permissions" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const { courtId, sessionId } = await req.json();
-    
     if (!courtId) {
-      return new Response(
-        JSON.stringify({ ok: false, error: "Court ID is required" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ ok: false, error: "Court ID is required" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const supabase = serviceSupabase;
+    const { data: court, error: courtError } = await supabase
+      .from("courts")
+      .select("id, session_id")
+      .eq("id", courtId)
+      .maybeSingle();
+    if (courtError || !court) {
+      return new Response(JSON.stringify({ ok: false, error: "Court not found" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    // Resolve session_id: use passed sessionId, fallback to courts.session_id
-    let resolvedSessionId = sessionId || null;
+    const resolvedSessionId = sessionId || court.session_id || null;
     if (!resolvedSessionId) {
-      const { data: courtForSession } = await supabase
-        .from("courts")
-        .select("session_id")
-        .eq("id", courtId)
-        .maybeSingle();
-      resolvedSessionId = courtForSession?.session_id || null;
+      return new Response(JSON.stringify({ ok: false, error: "Session ID is required" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (court.session_id && court.session_id !== resolvedSessionId) {
+      return new Response(JSON.stringify({ ok: false, error: "Court does not belong to the active session" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Fetch players for this court scoped to session
-    let playersQuery = supabase
+    const { data: players, error: playersError } = await supabase
       .from("players")
       .select("id, name")
       .eq("court_id", courtId)
+      .eq("session_id", resolvedSessionId)
       .order("created_at", { ascending: true });
-    if (resolvedSessionId) {
-      playersQuery = playersQuery.eq("session_id", resolvedSessionId);
+    if (playersError) {
+      return new Response(JSON.stringify({ ok: false, error: "Failed to load players" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
-    const { data: players, error: playersError } = await playersQuery;
 
-    // Insert new matches
+    const n = players?.length || 0;
+    if (n < 8 || n > 12) {
+      return new Response(JSON.stringify({ ok: false, error: "Mystery Partner requires 8 to 12 players" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { count: existingCount, error: existingError } = await supabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .eq("court_id", courtId)
+      .eq("session_id", resolvedSessionId)
+      .is("group_id", null);
+    if (existingError) throw existingError;
+    if ((existingCount || 0) > 0) {
+      return new Response(JSON.stringify({ ok: false, error: "Rotation already exists for this court and session" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const result = generateRotation(players as Player[], n);
+    if (!result.ok) {
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const matchInserts = result.matches.map((match, index) => ({
       court_id: courtId,
       match_index: index,
@@ -197,37 +231,44 @@ serve(async (req) => {
       team2_player2_id: match.team2_player2_id,
       status: "pending",
       override_played: false,
-      session_id: sessionId,
+      session_id: resolvedSessionId,
     }));
-
     const { error: insertError } = await supabase.from("matches").insert(matchInserts);
     if (insertError) {
       console.error("Database error inserting matches:", insertError);
-      return new Response(
-        JSON.stringify({ ok: false, error: "Failed to save rotation" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ ok: false, error: "Failed to save rotation" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Reset/upsert court state for this court + session
     const { error: stateError } = await supabase
       .from("court_state")
-      .upsert({ court_id: courtId, session_id: resolvedSessionId, current_match_index: 0, phase: "idle", updated_at: new Date().toISOString() }, { onConflict: "court_id" });
-    
+      .upsert(
+        {
+          court_id: courtId,
+          session_id: resolvedSessionId,
+          current_match_index: 0,
+          phase: "idle",
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "session_id,court_id" },
+      );
     if (stateError) {
       console.error("Database error updating court state:", stateError);
+      await supabase.from("matches").delete().eq("court_id", courtId).eq("session_id", resolvedSessionId).is("group_id", null);
+      return new Response(JSON.stringify({ ok: false, error: "Failed to initialize court state" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // === ROTATION AUDIT ===
     try {
-      // Compute opponent repeats
       const opponentCounts: Record<string, number> = {};
       const makePairKey = (a: string, b: string) => [a, b].sort().join("-");
       for (const m of result.matches) {
-        const team1 = [m.team1_player1_id, m.team1_player2_id];
-        const team2 = [m.team2_player1_id, m.team2_player2_id];
-        for (const p1 of team1) {
-          for (const p2 of team2) {
+        for (const p1 of [m.team1_player1_id, m.team1_player2_id]) {
+          for (const p2 of [m.team2_player1_id, m.team2_player2_id]) {
             const key = makePairKey(p1, p2);
             opponentCounts[key] = (opponentCounts[key] || 0) + 1;
           }
@@ -237,24 +278,22 @@ serve(async (req) => {
       for (const count of Object.values(opponentCounts)) {
         if (count > 1) repeatOpponentCount += count - 1;
       }
-
-      // Compute fairness score
       const diag = result.diagnostics;
       let fairnessScore = 100;
       if (diag.max_matches_per_player - diag.min_matches_per_player > 1) fairnessScore -= 10;
       if (diag.max_sitout_streak > 2) fairnessScore -= 10;
       fairnessScore -= diag.repeat_partner_count * 2;
-      fairnessScore -= repeatOpponentCount * 1;
+      fairnessScore -= repeatOpponentCount;
       fairnessScore = Math.max(0, fairnessScore);
 
-      // Delete old audit for this court + session
-      let auditDeleteQuery = supabase.from("rotation_audit").delete().eq("court_id", courtId);
-      if (resolvedSessionId) {
-        auditDeleteQuery = auditDeleteQuery.eq("session_id", resolvedSessionId);
-      }
-      await auditDeleteQuery;
+      const { error: deleteAuditError } = await supabase
+        .from("rotation_audit")
+        .delete()
+        .eq("court_id", courtId)
+        .eq("session_id", resolvedSessionId);
+      if (deleteAuditError) throw deleteAuditError;
 
-      await supabase.from("rotation_audit").insert({
+      const { error: auditError } = await supabase.from("rotation_audit").insert({
         session_id: resolvedSessionId,
         court_id: courtId,
         total_players: n,
@@ -265,23 +304,22 @@ serve(async (req) => {
         repeat_opponent_count: repeatOpponentCount,
         fairness_score: fairnessScore,
       });
-
-      console.log("Rotation audit stored:", { fairnessScore, repeatOpponentCount });
+      if (auditError) throw auditError;
     } catch (auditErr) {
       console.error("Audit storage warning (non-blocking):", auditErr);
     }
 
-    return new Response(
-      JSON.stringify(result),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify(result), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error: unknown) {
     console.error("Unexpected error:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    return new Response(
-      JSON.stringify({ ok: false, error: errorMessage }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ ok: false, error: errorMessage }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
 

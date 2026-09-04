@@ -155,9 +155,7 @@ const AdminDashboard = () => {
         const matchCount = matchData?.length || 0;
         const hasLive = (matchData || []).some(m => m.status === "in_progress");
 
-        // Map by court_ids array key for lookup
-        const key = [...(g.court_ids || [])].sort((a, b) => a - b).join(",");
-        result.set(key, { playerCount: pCount || 0, matchCount, hasLive });
+        result.set(g.id, { playerCount: pCount || 0, matchCount, hasLive });
       }
 
       return result;
@@ -180,8 +178,8 @@ const AdminDashboard = () => {
   // ── Status helpers ──
   const getItemStatus = (item: RenderItem): CourtStatus => {
     if (item.type === "group") {
-      const key = [...(item.courtNumbers || [])].sort((a, b) => a - b).join(",");
-      const status = groupStatusMap.get(key);
+      if (!item.courtGroupId) return "setup";
+      const status = groupStatusMap.get(item.courtGroupId);
       if (!status) return "setup";
       if (status.hasLive) return "live";
       if (status.matchCount > 0) return "locked";
@@ -214,6 +212,10 @@ const AdminDashboard = () => {
   // Auto-create court row on click
   const handleCourtClick = async (item: RenderItem) => {
     if (!item.courtNumber) return;
+    if (!currentSessionId) {
+      toast.error("No active setup session found");
+      return;
+    }
     setCreatingCourtNum(item.courtNumber);
     try {
       const { data, error } = await supabase
@@ -223,17 +225,19 @@ const AdminDashboard = () => {
           event_id: selectedEventId,
           location_id: selectedLocationId || null,
           format_type: (item.formatType || "mystery_partner") as any,
+          session_id: currentSessionId,
         } as any)
         .select("id")
         .single();
       if (error) throw error;
       const courtId = (data as any).id;
 
-      await supabase.from("court_state").insert({ court_id: courtId } as any);
+      await supabase.from("court_state").insert({ court_id: courtId, session_id: currentSessionId } as any);
       await supabase
         .from("court_units" as any)
         .update({ court_id: courtId } as any)
-        .eq("id", item.unitId);
+        .eq("id", item.unitId)
+        .eq("session_id", currentSessionId);
 
       navigate(`/admin/court/${courtId}`);
     } catch (err: any) {
@@ -264,11 +268,24 @@ const AdminDashboard = () => {
         return;
       }
 
-      // 2. No linked group — create a new one and link it back to the court_unit
+      // 2. No linked group — resolve this session's real court ids, create a group, and link it back.
+      if (!currentSessionId) throw new Error("No active setup session found");
+      const { data: memberUnits, error: memberError } = await supabase
+        .from("court_units" as any)
+        .select("court_id, court_number")
+        .eq("session_id", currentSessionId)
+        .eq("type", "court")
+        .in("court_number", item.courtNumbers);
+      if (memberError) throw memberError;
+      const memberCourtIds = (memberUnits || []).map((u: any) => u.court_id).filter(Boolean);
+      if (memberCourtIds.length !== item.courtNumbers.length) {
+        throw new Error("One or more group courts are not initialized for this session.");
+      }
+
       const { data, error } = await supabase
         .from("court_groups")
         .insert({
-          court_ids: item.courtNumbers,
+          court_ids: memberCourtIds,
           session_config_id: sessionConfig!.id,
           session_id: currentSessionId,
           format_type: "mystery_partner",
@@ -283,7 +300,8 @@ const AdminDashboard = () => {
       await supabase
         .from("court_units" as any)
         .update({ court_group_id: newGroupId } as any)
-        .eq("id", item.unitId);
+        .eq("id", item.unitId)
+        .eq("session_id", currentSessionId);
 
       navigate(`/admin/group/${newGroupId}`);
     } catch (err: any) {
