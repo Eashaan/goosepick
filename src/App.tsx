@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { EventProvider } from "@/hooks/useEventContext";
+import { ParticipantAuthProvider } from "@/hooks/useParticipantAuth";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import AdminLogin from "./pages/admin/AdminLogin";
@@ -13,6 +14,11 @@ import AdminGroup from "./pages/admin/AdminGroup";
 import PublicCourtSelector from "./pages/public/PublicCourtSelector";
 import PublicCourt from "./pages/public/PublicCourt";
 import PublicGroup from "./pages/public/PublicGroup";
+import ParticipantLogin from "./pages/participant/ParticipantLogin";
+import AuthCallback from "./pages/participant/AuthCallback";
+import MyGoosepick from "./pages/participant/MyGoosepick";
+import MyProfile from "./pages/participant/MyProfile";
+import RequireParticipant from "./pages/participant/RequireParticipant";
 
 const queryClient = new QueryClient();
 
