@@ -1,5 +1,5 @@
 -- Foundation hardening 3A
--- 1) Make group scoring server-atomic.
+-- 1) Make group scoring server-atomic and admin-only.
 -- 2) Bind feedback to group identity when submitted from a group.
 
 ALTER TABLE public.feedback
@@ -25,8 +25,26 @@ DECLARE
   v_match public.matches%ROWTYPE;
   v_conflict text;
 BEGIN
+  IF NOT public.is_admin() THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Admin access required');
+  END IF;
+
   IF p_session_id IS NULL OR p_group_id IS NULL OR p_match_id IS NULL OR p_court_number IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'error', 'session, group, court, and match are required');
+  END IF;
+
+  -- Serialize *all* starts within this group, not merely starts on one physical
+  -- court. Without this group-row lock two admins could concurrently start two
+  -- matches on different courts that share a player before either transaction
+  -- becomes visible to the other.
+  PERFORM id
+  FROM public.court_groups
+  WHERE id = p_group_id
+    AND session_id = p_session_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Group does not belong to this session');
   END IF;
 
   SELECT * INTO v_state
@@ -66,8 +84,7 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'Match is not pending');
   END IF;
 
-  -- Re-check player concurrency inside the same DB transaction. Client-side checks
-  -- are useful UX but are not sufficient when multiple admins are scoring.
+  -- Re-check player concurrency inside the serialized DB transaction.
   SELECT p.name INTO v_conflict
   FROM public.matches lm
   JOIN public.players p ON p.id IN (
@@ -135,11 +152,25 @@ DECLARE
   v_state public.group_court_state%ROWTYPE;
   v_status text;
 BEGIN
+  IF NOT public.is_admin() THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Admin access required');
+  END IF;
+
   IF p_session_id IS NULL OR p_group_id IS NULL OR p_match_id IS NULL OR p_court_number IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'error', 'session, group, court, and match are required');
   END IF;
   IF p_team1_score IS NULL OR p_team2_score IS NULL OR p_team1_score < 0 OR p_team2_score < 0 THEN
     RETURN jsonb_build_object('ok', false, 'error', 'Scores must be non-negative numbers');
+  END IF;
+
+  PERFORM id
+  FROM public.court_groups
+  WHERE id = p_group_id
+    AND session_id = p_session_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Group does not belong to this session');
   END IF;
 
   SELECT * INTO v_state
@@ -194,3 +225,9 @@ BEGIN
   RETURN jsonb_build_object('ok', true, 'status', 'completed');
 END;
 $$;
+
+-- SECURITY DEFINER scoring functions must never be directly callable by anon.
+REVOKE ALL ON FUNCTION public.start_group_match_atomic(uuid, uuid, integer, uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.end_group_match_atomic(uuid, uuid, integer, uuid, integer, integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.start_group_match_atomic(uuid, uuid, integer, uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.end_group_match_atomic(uuid, uuid, integer, uuid, integer, integer) TO authenticated;
