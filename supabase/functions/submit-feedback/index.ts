@@ -80,12 +80,27 @@ Deno.serve(async (req) => {
     } else if (player.court_id === null && group_id && player.group_id === group_id) {
       const { data: group, error: groupError } = await supabase
         .from('court_groups')
-        .select('id, court_ids, session_id')
+        .select('id, session_id')
         .eq('id', group_id)
         .eq('session_id', session_id)
         .single();
 
-      if (groupError || !group || !group.court_ids?.includes(court_id)) {
+      if (groupError || !group) {
+        return new Response(
+          JSON.stringify({ ok: false, error: 'Player does not belong to this group' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { data: membership, error: membershipError } = await supabase
+        .from('group_physical_courts')
+        .select('id')
+        .eq('group_id', group_id)
+        .eq('session_id', session_id)
+        .eq('court_id', court_id)
+        .maybeSingle();
+
+      if (membershipError || !membership) {
         return new Response(
           JSON.stringify({ ok: false, error: 'Player does not belong to this court' }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
