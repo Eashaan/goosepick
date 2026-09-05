@@ -11,7 +11,9 @@ ALTER TABLE public.group_physical_courts
   ADD CONSTRAINT group_physical_courts_group_id_fkey
   FOREIGN KEY (group_id) REFERENCES public.court_groups(id) ON DELETE CASCADE;
 
--- Backfill membership for groups created before the canonical mapping was used.
+-- Backfill membership for editable sessions created before the canonical mapping
+-- was used. Ended sessions are intentionally skipped because archive-freeze
+-- triggers forbid retroactive writes to ended-session operational tables.
 -- court_units.group_court_numbers contains display numbers; the sibling court
 -- units contain the real court_id for each display number in that same session.
 INSERT INTO public.group_physical_courts (
@@ -26,6 +28,9 @@ SELECT
   court_unit.court_id,
   group_unit.session_id
 FROM public.court_units group_unit
+JOIN public.sessions s
+  ON s.id = group_unit.session_id
+ AND s.status <> 'ended'
 CROSS JOIN LATERAL unnest(group_unit.group_court_numbers) AS member_number(court_number)
 JOIN public.court_units court_unit
   ON court_unit.session_id = group_unit.session_id
