@@ -8,13 +8,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import PageLayout from "@/components/layout/PageLayout";
-import { useEventContext, GOOSEPICK_SOCIAL_ID, GOOSEPICK_THURSDAYS_ID } from "@/hooks/useEventContext";
+import { useEventContext } from "@/hooks/useEventContext";
 import goosepickExperiencesLogo from "@/assets/goosepick-experiences-logo.png";
 
 const Index = () => {
   const navigate = useNavigate();
   const {
     cities,
+    events,
     locations,
     selectedCityId,
     selectedEventId,
@@ -26,14 +27,24 @@ const Index = () => {
     isLoading,
   } = useEventContext();
 
-  // Filter locations for Thursdays event in selected city, sorted Bandra first
-  const thursdaysLocations = locations
-    .filter((l) => l.event_id === GOOSEPICK_THURSDAYS_ID)
-    .sort((a, b) => {
-      if (a.name.toLowerCase().includes("bandra")) return -1;
-      if (b.name.toLowerCase().includes("bandra")) return 1;
-      return a.name.localeCompare(b.name);
-    });
+  // Event records are resolved from the currently selected city instead of using
+  // Mumbai-era fixed UUIDs. This keeps the home flow valid when Delhi/Bengaluru
+  // get their own Social and Thursdays event rows.
+  const socialEvent = events.find((event) => event.event_type === "one_off") || null;
+  const thursdaysEvent = events.find((event) => event.event_type === "recurring") || null;
+  const socialEventId = socialEvent?.id || null;
+  const thursdaysEventId = thursdaysEvent?.id || null;
+
+  // Locations are also bound to the selected city's actual Thursdays event.
+  const thursdaysLocations = thursdaysEventId
+    ? locations
+        .filter((location) => location.event_id === thursdaysEventId)
+        .sort((a, b) => {
+          if (a.name.toLowerCase().includes("bandra")) return -1;
+          if (b.name.toLowerCase().includes("bandra")) return 1;
+          return a.name.localeCompare(b.name);
+        })
+    : [];
 
   const canShowCtas = selectedEventId && (!requiresLocation || selectedLocationId);
 
@@ -45,7 +56,8 @@ const Index = () => {
     navigate("/admin/login");
   };
 
-  const handleEventSelect = (eventId: string) => {
+  const handleEventSelect = (eventId: string | null) => {
+    if (!eventId) return;
     setSelectedEventId(eventId);
     setSelectedLocationId(null);
   };
@@ -96,32 +108,34 @@ const Index = () => {
           <div className="grid grid-cols-1 gap-4 w-full sm:grid-cols-2">
             <Button
               size="lg"
-              variant={selectedEventId === GOOSEPICK_SOCIAL_ID ? "default" : "secondary"}
+              variant={selectedEventId === socialEventId ? "default" : "secondary"}
+              disabled={!socialEventId}
               className={`h-16 text-lg font-semibold rounded-2xl transition-all duration-200 ${
-                selectedEventId === GOOSEPICK_SOCIAL_ID
+                selectedEventId === socialEventId
                   ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
                   : "hover:bg-primary/10"
               }`}
-              onClick={() => handleEventSelect(GOOSEPICK_SOCIAL_ID)}
+              onClick={() => handleEventSelect(socialEventId)}
             >
-              Goosepick Social
+              {socialEvent?.name || "Goosepick Social"}
             </Button>
             <Button
               size="lg"
-              variant={selectedEventId === GOOSEPICK_THURSDAYS_ID ? "default" : "secondary"}
+              variant={selectedEventId === thursdaysEventId ? "default" : "secondary"}
+              disabled={!thursdaysEventId}
               className={`h-16 text-lg font-semibold rounded-2xl transition-all duration-200 ${
-                selectedEventId === GOOSEPICK_THURSDAYS_ID
+                selectedEventId === thursdaysEventId
                   ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
                   : "hover:bg-primary/10"
               }`}
-              onClick={() => handleEventSelect(GOOSEPICK_THURSDAYS_ID)}
+              onClick={() => handleEventSelect(thursdaysEventId)}
             >
-              Goosepick Thursdays
+              {thursdaysEvent?.name || "Goosepick Thursdays"}
             </Button>
           </div>
 
           {/* Location Selection (Thursdays only) */}
-          {selectedEventId === GOOSEPICK_THURSDAYS_ID && thursdaysLocations.length > 0 && (
+          {selectedEventId === thursdaysEventId && thursdaysLocations.length > 0 && (
             <div className="w-full animate-in fade-in slide-in-from-top-2 duration-300">
               <div className="grid grid-cols-2 gap-4">
                 {thursdaysLocations.map((location) => (
