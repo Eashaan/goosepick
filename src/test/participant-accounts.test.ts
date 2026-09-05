@@ -134,17 +134,17 @@ describe("participant accounts — schema guards", () => {
     expect(sql).not.toMatch(/CREATE POLICY[^;]*ON public\.participant_profiles FOR DELETE/i);
   });
 
-  it("locks down the SECURITY DEFINER profile helper from PUBLIC", () => {
+  it("locks down the SECURITY DEFINER profile helper from PUBLIC and anon", () => {
     const fn = "public.current_participant_profile_id()";
     const definition = sql.indexOf(`CREATE OR REPLACE FUNCTION ${fn}`);
-    const revoke = sql.indexOf(`REVOKE ALL ON FUNCTION ${fn} FROM PUBLIC;`);
+    const revokePublic = sql.indexOf(`REVOKE ALL ON FUNCTION ${fn} FROM PUBLIC;`);
+    const revokeAnon = sql.indexOf(`REVOKE ALL ON FUNCTION ${fn} FROM anon;`);
     const grant = sql.indexOf(`GRANT EXECUTE ON FUNCTION ${fn} TO authenticated, service_role;`);
     expect(definition).toBeGreaterThan(-1);
-    expect(revoke).toBeGreaterThan(definition);
-    expect(grant).toBeGreaterThan(revoke);
-    // Revoking only from anon would leave the default PUBLIC EXECUTE grant in place.
-    expect(sql).not.toMatch(/REVOKE[^;]*ON FUNCTION[^;]*FROM\s+anon\s*;/i);
-    // Every SECURITY DEFINER function in this file must be revoked from PUBLIC.
+    expect(revokePublic).toBeGreaterThan(definition);
+    expect(revokeAnon).toBeGreaterThan(revokePublic);
+    expect(grant).toBeGreaterThan(revokeAnon);
+    // Every SECURITY DEFINER function in this file must be revoked from PUBLIC and anon.
     const functionBodies = sql.match(/CREATE OR REPLACE FUNCTION public\.\w+\([^)]*\)[\s\S]*?\$\$;/g) || [];
     const definers = functionBodies
       .filter((body) => /SECURITY DEFINER/.test(body))
@@ -152,6 +152,7 @@ describe("participant accounts — schema guards", () => {
     expect(definers).toEqual([fn]);
     for (const name of definers) {
       expect(sql).toContain(`REVOKE ALL ON FUNCTION ${name} FROM PUBLIC;`);
+      expect(sql).toContain(`REVOKE ALL ON FUNCTION ${name} FROM anon;`);
     }
   });
 
