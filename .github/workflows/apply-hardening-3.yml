@@ -1,0 +1,36 @@
+name: Apply foundation hardening 3 patch
+
+on:
+  push:
+    branches: [codex/foundation-hardening-3]
+    paths:
+      - 'scripts/apply_foundation_hardening_3.py'
+      - '.github/workflows/apply-hardening-3.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/foundation-hardening-3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply patch
+        run: python scripts/apply_foundation_hardening_3.py
+      - name: Commit generated changes
+        run: |
+          if git diff --quiet; then
+            echo 'No changes to commit'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/pages/admin/AdminGroup.tsx src/components/public/PersonalRoster.tsx supabase/functions/generate-group-rotation/index.ts
+          git commit -m 'Migrate group runtime to hardened session-safe paths'
+          git push origin HEAD:codex/foundation-hardening-3
