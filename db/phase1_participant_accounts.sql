@@ -3,10 +3,12 @@
 -- Apply later via the platform migration tool, byte-for-byte, once approved.
 --
 -- This migration is purely additive. It creates the permanent participant
--- identity + commerce/registration layer above the existing roster tables and
--- adds two NULLABLE linkage columns to public.players. No existing table,
--- policy, function, trigger or row is modified or removed, so all current
--- roster/admin/rotation/scoring/reset behavior is preserved.
+-- identity + commerce/registration layer above the existing roster tables.
+-- The ONLY existing table touched is public.players, which is additively
+-- altered with two NULLABLE linkage columns (profile_id, registration_id) and
+-- their indexes. No existing column, policy, function, trigger or row is
+-- modified or removed, so all current roster/admin/rotation/scoring/reset
+-- behavior is preserved.
 
 -- ---------------------------------------------------------------------------
 -- 0. Reusable updated_at helper (project has none yet)
@@ -53,14 +55,23 @@ CREATE POLICY "Participants can view their own profile"
   ON public.participant_profiles FOR SELECT TO authenticated
   USING (user_id = auth.uid() OR public.is_admin());
 
+-- A participant may only write a row for their own auth identity AND the
+-- stored email must match the verified email in their JWT. This stops a user
+-- from claiming someone else's address or poisoning the unique email index.
 CREATE POLICY "Participants can create their own profile"
   ON public.participant_profiles FOR INSERT TO authenticated
-  WITH CHECK (user_id = auth.uid());
+  WITH CHECK (
+    user_id = auth.uid()
+    AND lower(email) = lower(COALESCE(auth.jwt() ->> 'email', ''))
+  );
 
 CREATE POLICY "Participants can update their own profile"
   ON public.participant_profiles FOR UPDATE TO authenticated
   USING (user_id = auth.uid())
-  WITH CHECK (user_id = auth.uid());
+  WITH CHECK (
+    user_id = auth.uid()
+    AND lower(email) = lower(COALESCE(auth.jwt() ->> 'email', ''))
+  );
 
 CREATE TRIGGER participant_profiles_set_updated_at
   BEFORE UPDATE ON public.participant_profiles
@@ -77,7 +88,9 @@ AS $$
   SELECT id FROM public.participant_profiles WHERE user_id = auth.uid() LIMIT 1;
 $$;
 
-REVOKE ALL ON FUNCTION public.current_participant_profile_id() FROM anon;
+-- SECURITY DEFINER functions are executable by PUBLIC by default, so revoking
+-- from anon alone is not enough. Revoke from PUBLIC, then grant explicitly.
+REVOKE ALL ON FUNCTION public.current_participant_profile_id() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.current_participant_profile_id() TO authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
