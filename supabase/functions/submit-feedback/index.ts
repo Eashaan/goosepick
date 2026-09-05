@@ -29,9 +29,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (note && typeof note === 'string' && note.length > 200) {
+    if (note && typeof note === 'string' && note.length > 120) {
       return new Response(
-        JSON.stringify({ ok: false, error: 'Note must be 200 characters or less' }),
+        JSON.stringify({ ok: false, error: 'Note must be 120 characters or less' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -68,24 +68,45 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Validate player belongs to this court (ungrouped) or group containing this court
+    // Validate player belongs to this court (ungrouped) or group containing this court.
+    let resolvedGroupId: string | null = null;
     if (player.court_id === court_id) {
-      // Ungrouped player — direct match, OK
+      if (group_id) {
+        return new Response(
+          JSON.stringify({ ok: false, error: 'Ungrouped player cannot submit group feedback' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     } else if (player.court_id === null && group_id && player.group_id === group_id) {
-      // Group player — verify the group contains this court_id
       const { data: group, error: groupError } = await supabase
         .from('court_groups')
-        .select('court_ids, session_id')
+        .select('id, session_id')
         .eq('id', group_id)
         .eq('session_id', session_id)
         .single();
 
-      if (groupError || !group || !group.court_ids?.includes(court_id)) {
+      if (groupError || !group) {
+        return new Response(
+          JSON.stringify({ ok: false, error: 'Player does not belong to this group' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { data: membership, error: membershipError } = await supabase
+        .from('group_physical_courts')
+        .select('id')
+        .eq('group_id', group_id)
+        .eq('session_id', session_id)
+        .eq('court_id', court_id)
+        .maybeSingle();
+
+      if (membershipError || !membership) {
         return new Response(
           JSON.stringify({ ok: false, error: 'Player does not belong to this court' }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+      resolvedGroupId = group.id;
     } else {
       return new Response(
         JSON.stringify({ ok: false, error: 'Player does not belong to this court' }),
@@ -100,6 +121,7 @@ Deno.serve(async (req) => {
           court_id,
           player_id,
           session_id,
+          group_id: resolvedGroupId,
           rating,
           note: note?.trim() || null,
         },
@@ -121,9 +143,9 @@ Deno.serve(async (req) => {
     const wasInserted = insertResult && insertResult.length > 0;
 
     return new Response(
-      JSON.stringify({ 
-        ok: true, 
-        status: wasInserted ? 'submitted' : 'already_submitted' 
+      JSON.stringify({
+        ok: true,
+        status: wasInserted ? 'submitted' : 'already_submitted'
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

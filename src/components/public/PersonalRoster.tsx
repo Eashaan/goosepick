@@ -61,7 +61,12 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
         m.team1_player2_id === selectedPlayerId ||
         m.team2_player1_id === selectedPlayerId ||
         m.team2_player2_id === selectedPlayerId
-    ).sort((a, b) => a.match_index - b.match_index);
+    ).sort((a, b) => {
+      if (courtsInGroup > 1) {
+        return (a.global_match_index ?? a.match_index) - (b.global_match_index ?? b.match_index);
+      }
+      return a.match_index - b.match_index;
+    });
   }, [selectedPlayerId, matches]);
 
   // Calculate "You're Up Next" nudge
@@ -90,9 +95,7 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
         m.team2_player2_id === selectedPlayerId
       );
       const rawCourtNum = playerCurrentMatch?.court_number;
-      const displayNum = rawCourtNum && courtIds
-        ? courtIds.indexOf(rawCourtNum) + 1 || rawCourtNum
-        : rawCourtNum || courtId;
+      const displayNum = rawCourtNum || courtId;
       const courtLabel = `Court ${displayNum}`;
       return { text: `You're live on ${courtLabel}.`, type: "playing" };
     }
@@ -246,7 +249,7 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
   // Show rank popup after feedback is dismissed
   useEffect(() => {
     if (feedbackSubmitted && hasCompletedAllMatches && selectedPlayerId && playerRank > 0) {
-      const shownKey = `gp_rank_popup_${courtId}_${selectedPlayerId}`;
+      const shownKey = `${storagePrefix}_rank_popup_${selectedPlayerId}`;
       const alreadyShown = localStorage.getItem(shownKey);
       if (!alreadyShown && !showFeedback) {
         setShowRankPopup(true);

@@ -10,7 +10,7 @@ import GlobalHeader from "@/components/layout/GlobalHeader";
 import GroupCourtPulse from "@/components/public/GroupCourtPulse";
 import PersonalRoster from "@/components/public/PersonalRoster";
 import Leaderboard from "@/components/public/Leaderboard";
-import { useEventContext, GOOSEPICK_THURSDAYS_ID } from "@/hooks/useEventContext";
+import { useEventContext } from "@/hooks/useEventContext";
 import { useActiveSession } from "@/hooks/useActiveSession";
 import { format } from "date-fns";
 
@@ -191,7 +191,8 @@ const PublicGroup = () => {
 
   // Derive display name from court_units group_court_numbers (display numbers), not court_groups.court_ids (DB PKs)
   const groupLabel = useMemo(() => {
-    const nums = groupCourtUnit?.group_court_numbers || group?.court_ids;
+    const nums = groupCourtUnit?.group_court_numbers
+      || group?.court_ids?.map((_: number, i: number) => i + 1);
     if (!nums || nums.length === 0) return "Group";
     if (nums.length === 1) return `Court ${nums[0]}`;
     if (nums.length === 2) return `Courts ${nums[0]} & ${nums[1]}`;
@@ -241,7 +242,7 @@ const PublicGroup = () => {
           matches={matches}
           players={players}
           totalMatches={group.total_matches || matches.length}
-          courtIds={group.court_ids}
+          courtIds={groupCourtUnit?.group_court_numbers || group.court_ids.map((_: number, i: number) => i + 1)}
         />
 
         <Tabs defaultValue="personal" className="flex-1 flex flex-col">
@@ -262,7 +263,7 @@ const PublicGroup = () => {
               courtState={syntheticCourtState}
               courtsInGroup={group?.court_ids?.length || 1}
               groupId={group?.id}
-              courtIds={group?.court_ids}
+              courtIds={groupCourtUnit?.group_court_numbers || group?.court_ids?.map((_: number, i: number) => i + 1)}
             />
           </TabsContent>
 
@@ -289,7 +290,7 @@ const GroupFooterText = () => {
   const today = format(new Date(), "MMMM d, yyyy");
   const cityName = selectedCity?.name || "Mumbai";
   const eventName = selectedEvent?.name || "Goosepick Social";
-  const isThursdays = selectedEvent?.id === GOOSEPICK_THURSDAYS_ID;
+  const isThursdays = selectedEvent?.event_type === "recurring";
 
   const footerText = isThursdays && selectedLocation
     ? `${eventName} ${cityName} – ${today} – ${selectedLocation.name}`
