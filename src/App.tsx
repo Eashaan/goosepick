@@ -25,24 +25,45 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <EventProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/admin/login" element={<AdminLogin />} />
-            <Route path="/admin" element={<AdminDashboard />} />
-            <Route path="/admin/court/:courtId" element={<AdminCourt />} />
-            <Route path="/admin/group/:groupId" element={<AdminGroup />} />
-            <Route path="/public" element={<PublicCourtSelector />} />
-            <Route path="/public/court/:courtId" element={<PublicCourt />} />
-            <Route path="/public/group/:groupId" element={<PublicGroup />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
+      <ParticipantAuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/admin/login" element={<AdminLogin />} />
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/court/:courtId" element={<AdminCourt />} />
+              <Route path="/admin/group/:groupId" element={<AdminGroup />} />
+              <Route path="/public" element={<PublicCourtSelector />} />
+              <Route path="/public/court/:courtId" element={<PublicCourt />} />
+              <Route path="/public/group/:groupId" element={<PublicGroup />} />
+              {/* Participant accounts (additive; legacy /public flow untouched) */}
+              <Route path="/auth" element={<ParticipantLogin />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
+              <Route
+                path="/my"
+                element={
+                  <RequireParticipant>
+                    <MyGoosepick />
+                  </RequireParticipant>
+                }
+              />
+              <Route
+                path="/my/profile"
+                element={
+                  <RequireParticipant requireCompleteProfile={false}>
+                    <MyProfile />
+                  </RequireParticipant>
+                }
+              />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </TooltipProvider>
+      </ParticipantAuthProvider>
     </EventProvider>
   </QueryClientProvider>
 );
