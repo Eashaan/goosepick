@@ -5,14 +5,19 @@ import { resolve } from "node:path";
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 
 describe("foundation regression guards", () => {
-  it("keeps standalone scoring session-aware", () => {
-    const sql = read("supabase/migrations/20260905021000_session_scope_operational_state.sql");
-    expect(sql).toContain("p_session_id uuid");
-    expect(sql).toContain("UNIQUE (session_id, court_id)");
-    expect(sql).toContain("UNIQUE (session_id, court_id, match_index)");
+  it("keeps standalone scoring session-aware and admin-authorized", () => {
+    const scopeSql = read("supabase/migrations/20260905021000_session_scope_operational_state.sql");
+    expect(scopeSql).toContain("p_session_id uuid");
+    expect(scopeSql).toContain("UNIQUE (session_id, court_id)");
+    expect(scopeSql).toContain("UNIQUE (session_id, court_id, match_index)");
+
+    const authSql = read("supabase/migrations/20260905064000_authorize_standalone_scoring_rpcs.sql");
+    expect(authSql).toContain("IF NOT public.is_admin()");
+    expect(authSql).toContain("Admin access required");
+    expect(authSql).toContain("REVOKE ALL ON FUNCTION public.start_match_atomic");
   });
 
-  it("keeps group scoring server-atomic", () => {
+  it("keeps group scoring server-atomic, serialized, and admin-authorized", () => {
     const adminGroup = read("src/pages/admin/AdminGroup.tsx");
     expect(adminGroup).toContain('supabase.rpc("start_group_match_atomic"');
     expect(adminGroup).toContain('supabase.rpc("end_group_match_atomic"');
@@ -21,12 +26,17 @@ describe("foundation regression guards", () => {
     const sql = read("supabase/migrations/20260905061000_group_atomic_scoring_and_feedback_scope.sql");
     expect(sql).toContain("CREATE OR REPLACE FUNCTION public.start_group_match_atomic");
     expect(sql).toContain("CREATE OR REPLACE FUNCTION public.end_group_match_atomic");
+    expect(sql).toContain("IF NOT public.is_admin()");
+    expect(sql).toContain("FROM public.court_groups");
+    expect(sql).toContain("FOR UPDATE");
     expect(sql).toContain("is currently playing on another court");
+    expect(sql).toContain("REVOKE ALL ON FUNCTION public.start_group_match_atomic");
   });
 
   it("never treats group database court ids as display court numbers", () => {
     const adminGroup = read("src/pages/admin/AdminGroup.tsx");
     expect(adminGroup).toContain("groupCourtUnit?.group_court_numbers");
+    expect(adminGroup).toContain("const courtDisplayNumber = (cn: number): number => cn");
 
     const generator = read("supabase/functions/generate-group-rotation/index.ts");
     expect(generator).toContain("group_court_numbers");
@@ -41,11 +51,11 @@ describe("foundation regression guards", () => {
     expect(roster).toContain('`${storagePrefix}_rank_popup_${selectedPlayerId}`');
   });
 
-  it("binds feedback to session and group identity", () => {
+  it("binds feedback to session and canonical group membership", () => {
     const feedbackFunction = read("supabase/functions/submit-feedback/index.ts");
     expect(feedbackFunction).toContain("session_id");
-    expect(feedbackFunction).toContain("group_id");
     expect(feedbackFunction).toContain("group_id: resolvedGroupId");
+    expect(feedbackFunction).toContain("group_physical_courts");
     expect(feedbackFunction).toContain("120 characters or less");
   });
 
