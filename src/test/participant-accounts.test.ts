@@ -51,6 +51,14 @@ describe("participant accounts — routing", () => {
     expect(adminAuth).toContain('.from("user_roles")');
     expect(adminAuth).toContain("signInWithPassword");
   });
+
+  it("exchanges the PKCE code itself, never the full callback URL", () => {
+    const callback = read("src/pages/participant/AuthCallback.tsx");
+    expect(callback).toContain('const code = url.searchParams.get("code")');
+    expect(callback).toContain("supabase.auth.exchangeCodeForSession(code)");
+    expect(callback).not.toMatch(/exchangeCodeForSession\(\s*window\.location\.href\s*\)/);
+    expect(callback).not.toMatch(/exchangeCodeForSession\(\s*url\.(href|toString\(\))\s*\)/);
+  });
 });
 
 describe("participant accounts — schema guards", () => {
