@@ -35,6 +35,62 @@ export type Database = {
         }
         Relationships: []
       }
+      commerce_orders: {
+        Row: {
+          created_at: string
+          currency: string | null
+          financial_status: string | null
+          id: string
+          processed_at: string | null
+          purchaser_email: string | null
+          purchaser_phone: string | null
+          purchaser_profile_id: string | null
+          raw_payload: Json | null
+          shopify_order_id: string
+          shopify_order_name: string | null
+          total_amount: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string | null
+          financial_status?: string | null
+          id?: string
+          processed_at?: string | null
+          purchaser_email?: string | null
+          purchaser_phone?: string | null
+          purchaser_profile_id?: string | null
+          raw_payload?: Json | null
+          shopify_order_id: string
+          shopify_order_name?: string | null
+          total_amount?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string | null
+          financial_status?: string | null
+          id?: string
+          processed_at?: string | null
+          purchaser_email?: string | null
+          purchaser_phone?: string | null
+          purchaser_profile_id?: string | null
+          raw_payload?: Json | null
+          shopify_order_id?: string
+          shopify_order_name?: string | null
+          total_amount?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commerce_orders_purchaser_profile_id_fkey"
+            columns: ["purchaser_profile_id"]
+            isOneToOne: false
+            referencedRelation: "participant_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       court_groups: {
         Row: {
           court_ids: number[]
@@ -304,6 +360,102 @@ export type Database = {
             columns: ["city_id"]
             isOneToOne: false
             referencedRelation: "cities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      experience_registrations: {
+        Row: {
+          cancelled_at: string | null
+          claim_token_hash: string | null
+          commerce_order_id: string | null
+          created_at: string
+          id: string
+          mapping_id: string | null
+          participant_email: string | null
+          participant_name: string | null
+          participant_phone: string | null
+          profile_id: string | null
+          purchaser_profile_id: string | null
+          refunded_at: string | null
+          seat_index: number
+          session_id: string | null
+          shopify_line_item_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          claim_token_hash?: string | null
+          commerce_order_id?: string | null
+          created_at?: string
+          id?: string
+          mapping_id?: string | null
+          participant_email?: string | null
+          participant_name?: string | null
+          participant_phone?: string | null
+          profile_id?: string | null
+          purchaser_profile_id?: string | null
+          refunded_at?: string | null
+          seat_index: number
+          session_id?: string | null
+          shopify_line_item_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          claim_token_hash?: string | null
+          commerce_order_id?: string | null
+          created_at?: string
+          id?: string
+          mapping_id?: string | null
+          participant_email?: string | null
+          participant_name?: string | null
+          participant_phone?: string | null
+          profile_id?: string | null
+          purchaser_profile_id?: string | null
+          refunded_at?: string | null
+          seat_index?: number
+          session_id?: string | null
+          shopify_line_item_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "experience_registrations_commerce_order_id_fkey"
+            columns: ["commerce_order_id"]
+            isOneToOne: false
+            referencedRelation: "commerce_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "experience_registrations_mapping_id_fkey"
+            columns: ["mapping_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_session_mappings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "experience_registrations_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "participant_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "experience_registrations_purchaser_profile_id_fkey"
+            columns: ["purchaser_profile_id"]
+            isOneToOne: false
+            referencedRelation: "participant_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "experience_registrations_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
             referencedColumns: ["id"]
           },
         ]
@@ -714,6 +866,53 @@ export type Database = {
           },
         ]
       }
+      participant_profiles: {
+        Row: {
+          created_at: string
+          email: string
+          first_name: string | null
+          id: string
+          last_name: string | null
+          marketing_opt_in: boolean
+          phone: string | null
+          preferred_city_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          marketing_opt_in?: boolean
+          phone?: string | null
+          preferred_city_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          marketing_opt_in?: boolean
+          phone?: string | null
+          preferred_city_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "participant_profiles_preferred_city_id_fkey"
+            columns: ["preferred_city_id"]
+            isOneToOne: false
+            referencedRelation: "cities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       players: {
         Row: {
           added_by_admin: boolean
@@ -723,6 +922,8 @@ export type Database = {
           id: string
           is_guest: boolean
           name: string
+          profile_id: string | null
+          registration_id: string | null
           session_id: string | null
         }
         Insert: {
@@ -733,6 +934,8 @@ export type Database = {
           id?: string
           is_guest?: boolean
           name: string
+          profile_id?: string | null
+          registration_id?: string | null
           session_id?: string | null
         }
         Update: {
@@ -743,6 +946,8 @@ export type Database = {
           id?: string
           is_guest?: boolean
           name?: string
+          profile_id?: string | null
+          registration_id?: string | null
           session_id?: string | null
         }
         Relationships: [
@@ -758,6 +963,20 @@ export type Database = {
             columns: ["group_id"]
             isOneToOne: false
             referencedRelation: "court_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "players_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "participant_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "players_registration_id_fkey"
+            columns: ["registration_id"]
+            isOneToOne: false
+            referencedRelation: "experience_registrations"
             referencedColumns: ["id"]
           },
           {
@@ -951,6 +1170,76 @@ export type Database = {
           },
         ]
       }
+      shopify_session_mappings: {
+        Row: {
+          city_id: string | null
+          created_at: string
+          event_type: Database["public"]["Enums"]["scope_event_type"]
+          id: string
+          is_active: boolean
+          location_id: string | null
+          mapping_key: string
+          metadata: Json
+          session_date: string
+          session_id: string | null
+          shopify_product_id: string
+          shopify_variant_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          city_id?: string | null
+          created_at?: string
+          event_type: Database["public"]["Enums"]["scope_event_type"]
+          id?: string
+          is_active?: boolean
+          location_id?: string | null
+          mapping_key: string
+          metadata?: Json
+          session_date: string
+          session_id?: string | null
+          shopify_product_id: string
+          shopify_variant_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          city_id?: string | null
+          created_at?: string
+          event_type?: Database["public"]["Enums"]["scope_event_type"]
+          id?: string
+          is_active?: boolean
+          location_id?: string | null
+          mapping_key?: string
+          metadata?: Json
+          session_date?: string
+          session_id?: string | null
+          shopify_product_id?: string
+          shopify_variant_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_session_mappings_city_id_fkey"
+            columns: ["city_id"]
+            isOneToOne: false
+            referencedRelation: "cities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopify_session_mappings_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopify_session_mappings_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
@@ -974,6 +1263,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      current_participant_profile_id: { Args: never; Returns: string }
       end_group_match_atomic: {
         Args: {
           p_court_number: number

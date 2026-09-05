@@ -88,9 +88,11 @@ AS $$
   SELECT id FROM public.participant_profiles WHERE user_id = auth.uid() LIMIT 1;
 $$;
 
--- SECURITY DEFINER functions are executable by PUBLIC by default, so revoking
--- from anon alone is not enough. Revoke from PUBLIC, then grant explicitly.
+-- SECURITY DEFINER functions are executable by PUBLIC by default, and this
+-- platform may also hold an explicit anon grant. Revoke from both, then grant
+-- explicitly to the roles that legitimately need the helper.
 REVOKE ALL ON FUNCTION public.current_participant_profile_id() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.current_participant_profile_id() FROM anon;
 GRANT EXECUTE ON FUNCTION public.current_participant_profile_id() TO authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
