@@ -3,10 +3,12 @@
 -- Apply later via the platform migration tool, byte-for-byte, once approved.
 --
 -- This migration is purely additive. It creates the permanent participant
--- identity + commerce/registration layer above the existing roster tables and
--- adds two NULLABLE linkage columns to public.players. No existing table,
--- policy, function, trigger or row is modified or removed, so all current
--- roster/admin/rotation/scoring/reset behavior is preserved.
+-- identity + commerce/registration layer above the existing roster tables.
+-- The ONLY existing table touched is public.players, which is additively
+-- altered with two NULLABLE linkage columns (profile_id, registration_id) and
+-- their indexes. No existing column, policy, function, trigger or row is
+-- modified or removed, so all current roster/admin/rotation/scoring/reset
+-- behavior is preserved.
 
 -- ---------------------------------------------------------------------------
 -- 0. Reusable updated_at helper (project has none yet)

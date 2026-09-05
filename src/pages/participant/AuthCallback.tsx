@@ -34,7 +34,8 @@ const AuthCallback = () => {
 
       const code = url.searchParams.get("code");
       if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+        // PKCE: exchange the auth code itself (not the full URL) for a session.
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (error && !cancelled) {
           setFailed(error.message);
           setExchanging(false);
