@@ -2,7 +2,8 @@ import { createContext, useContext, useState, useEffect, ReactNode } from "react
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-// Known event IDs from seed data
+// Legacy seed IDs retained only for backward compatibility with older imports.
+// New UI/session resolution must use the selected city's loaded event records.
 export const GOOSEPICK_SOCIAL_ID = "11111111-1111-1111-1111-111111111111";
 export const GOOSEPICK_THURSDAYS_ID = "22222222-2222-2222-2222-222222222222";
 export const MUMBAI_CITY_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
@@ -47,7 +48,7 @@ interface EventContextType {
   clearSelection: () => void;
   isContextValid: boolean;
   contextLabel: string;
-  scopeEventType: 'social' | 'thursdays' | null;
+  scopeEventType: "social" | "thursdays" | null;
 }
 
 const EventContext = createContext<EventContextType | undefined>(undefined);
@@ -58,7 +59,7 @@ const LOCATION_STORAGE_KEY = "gp_selected_location";
 
 export const EventProvider = ({ children }: { children: ReactNode }) => {
   const [selectedCityId, setSelectedCityIdState] = useState<string>(() => {
-    return localStorage.getItem(CITY_STORAGE_KEY) || MUMBAI_CITY_ID;
+    return localStorage.getItem(CITY_STORAGE_KEY) || "";
   });
   const [selectedEventId, setSelectedEventIdState] = useState<string | null>(() => {
     return localStorage.getItem(EVENT_STORAGE_KEY) || null;
@@ -67,7 +68,6 @@ export const EventProvider = ({ children }: { children: ReactNode }) => {
     return localStorage.getItem(LOCATION_STORAGE_KEY) || null;
   });
 
-  // Persist event selection
   const setSelectedEventId = (id: string | null) => {
     setSelectedEventIdState(id);
     if (id) {
@@ -75,12 +75,10 @@ export const EventProvider = ({ children }: { children: ReactNode }) => {
     } else {
       localStorage.removeItem(EVENT_STORAGE_KEY);
     }
-    // Reset downstream
     setSelectedLocationIdState(null);
     localStorage.removeItem(LOCATION_STORAGE_KEY);
   };
 
-  // Persist location selection
   const setSelectedLocationId = (id: string | null) => {
     setSelectedLocationIdState(id);
     if (id) {
@@ -93,11 +91,9 @@ export const EventProvider = ({ children }: { children: ReactNode }) => {
   const setSelectedCityId = (id: string) => {
     setSelectedCityIdState(id);
     localStorage.setItem(CITY_STORAGE_KEY, id);
-    // Reset downstream selections when city changes
     setSelectedEventId(null);
   };
 
-  // Fetch cities
   const { data: cities = [], isLoading: citiesLoading } = useQuery({
     queryKey: ["cities"],
     queryFn: async () => {
@@ -111,7 +107,6 @@ export const EventProvider = ({ children }: { children: ReactNode }) => {
     },
   });
 
-  // Fetch events scoped by city
   const { data: events = [], isLoading: eventsLoading } = useQuery({
     queryKey: ["events", selectedCityId],
     queryFn: async () => {
@@ -127,7 +122,6 @@ export const EventProvider = ({ children }: { children: ReactNode }) => {
     enabled: !!selectedCityId,
   });
 
-  // Fetch locations scoped by city
   const { data: locations = [], isLoading: locationsLoading } = useQuery({
     queryKey: ["locations", selectedCityId],
     queryFn: async () => {
@@ -143,60 +137,59 @@ export const EventProvider = ({ children }: { children: ReactNode }) => {
     enabled: !!selectedCityId,
   });
 
-  const selectedCity = cities.find((c) => c.id === selectedCityId) || null;
-  const selectedEvent = events.find((e) => e.id === selectedEventId) || null;
-  const selectedLocation = locations.find((l) => l.id === selectedLocationId) || null;
+  const selectedCity = cities.find((city) => city.id === selectedCityId) || null;
+  const selectedEvent = events.find((event) => event.id === selectedEventId) || null;
+  const selectedLocation = locations.find((location) => location.id === selectedLocationId) || null;
 
-  // Recurring events require location selection
   const requiresLocation = selectedEvent?.event_type === "recurring";
-
-  // Derive scope event type for session_config / court_units scoping
-  const scopeEventType: 'social' | 'thursdays' | null = selectedEvent
-    ? (selectedEvent.event_type === 'one_off' ? 'social' : 'thursdays')
+  const scopeEventType: "social" | "thursdays" | null = selectedEvent
+    ? selectedEvent.event_type === "one_off"
+      ? "social"
+      : "thursdays"
     : null;
 
-  // Validate persisted event/location against loaded data
+  // Pick the first active city only when there is no valid persisted city. This
+  // keeps Mumbai as today's natural default without baking its UUID into routing.
   useEffect(() => {
-    if (eventsLoading || locationsLoading) return;
+    if (citiesLoading || cities.length === 0) return;
+    if (!selectedCityId || !cities.some((city) => city.id === selectedCityId)) {
+      const fallbackCityId = cities[0].id;
+      setSelectedCityIdState(fallbackCityId);
+      localStorage.setItem(CITY_STORAGE_KEY, fallbackCityId);
+      setSelectedEventIdState(null);
+      setSelectedLocationIdState(null);
+      localStorage.removeItem(EVENT_STORAGE_KEY);
+      localStorage.removeItem(LOCATION_STORAGE_KEY);
+    }
+  }, [cities, selectedCityId, citiesLoading]);
 
-    // If selected event doesn't exist in current city's events, clear it
-    if (selectedEventId && events.length > 0 && !events.find((e) => e.id === selectedEventId)) {
+  // Clear an event persisted from another city as soon as this city's events load.
+  useEffect(() => {
+    if (eventsLoading) return;
+    if (selectedEventId && !events.some((event) => event.id === selectedEventId)) {
       setSelectedEventId(null);
     }
-  }, [events, selectedEventId, eventsLoading, locationsLoading]);
+  }, [events, selectedEventId, eventsLoading]);
 
   useEffect(() => {
     if (locationsLoading) return;
-
-    // If selected location doesn't exist in current locations, clear it
-    if (selectedLocationId && locations.length > 0 && !locations.find((l) => l.id === selectedLocationId)) {
+    if (selectedLocationId && !locations.some((location) => location.id === selectedLocationId)) {
       setSelectedLocationId(null);
     }
   }, [locations, selectedLocationId, locationsLoading]);
 
-  // Clear location when event changes to non-recurring
   useEffect(() => {
     if (selectedEventId && !requiresLocation) {
       setSelectedLocationId(null);
     }
   }, [selectedEventId, requiresLocation]);
 
-  // Validate city exists
-  useEffect(() => {
-    if (citiesLoading || cities.length === 0) return;
-    if (!cities.find((c) => c.id === selectedCityId)) {
-      setSelectedCityId(cities[0]?.id || MUMBAI_CITY_ID);
-    }
-  }, [cities, selectedCityId, citiesLoading]);
-
-  // Context validity: city exists, event selected and valid
   const isContextValid = !!(
     selectedCity &&
     selectedEvent &&
     (!requiresLocation || selectedLocation)
   );
 
-  // Build context label for display
   const contextLabel = (() => {
     const parts: string[] = [];
     if (selectedCity) parts.push(selectedCity.name);
