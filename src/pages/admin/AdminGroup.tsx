@@ -120,11 +120,8 @@ const AdminGroup = () => {
   // contains database court PKs and must never be treated as display numbers.
   const courtNumbers: number[] = groupCourtUnit?.group_court_numbers
     || (group?.court_ids?.length ? group.court_ids.map((_: number, i: number) => i + 1) : []);
-  // Map raw court_id → local 1-indexed display number
-  const courtDisplayNumber = (cn: number): number => {
-    const idx = courtNumbers.indexOf(cn);
-    return idx >= 0 ? idx + 1 : cn;
-  };
+  // court_number is already the physical/display number for this session.
+  const courtDisplayNumber = (cn: number): number => cn;
 
   const N = courtNumbers.length;
 
