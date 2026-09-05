@@ -383,17 +383,31 @@ serve(async (req) => {
       return errorResponse("precheck", "Group not found", groupError?.message, groupError?.code);
     }
 
-    let courtNumbers: number[] = group.court_ids || [];
+    // Resolve display court numbers from canonical/session-scoped metadata.
+    // court_groups.court_ids contains DB court PKs, not display numbers.
+    let courtNumbers: number[] = [];
+    const { data: courtUnit } = await supabase
+      .from("court_units")
+      .select("group_court_numbers")
+      .eq("court_group_id", groupId)
+      .eq("session_id", sessionId || group.session_id)
+      .maybeSingle();
 
-    if (courtNumbers.length === 0) {
-      const { data: courtUnit } = await supabase
-        .from("court_units")
-        .select("group_court_numbers")
-        .eq("court_group_id", groupId)
-        .maybeSingle();
-
-      if (courtUnit?.group_court_numbers) {
-        courtNumbers = courtUnit.group_court_numbers;
+    if (courtUnit?.group_court_numbers?.length) {
+      courtNumbers = courtUnit.group_court_numbers;
+    } else {
+      const { data: existingMembers } = await supabase
+        .from("group_physical_courts")
+        .select("court_number")
+        .eq("group_id", groupId)
+        .eq("session_id", sessionId || group.session_id)
+        .order("court_number", { ascending: true });
+      if (existingMembers?.length) {
+        courtNumbers = existingMembers.map((m: any) => m.court_number);
+      } else if (group.court_ids?.length) {
+        // Compatibility only for pre-normalization groups: preserve court count without
+        // leaking database PK values into display/queue semantics.
+        courtNumbers = group.court_ids.map((_: number, i: number) => i + 1);
       }
     }
 
@@ -483,35 +497,46 @@ serve(async (req) => {
       if (existing?.court_id) {
         courtIdMap[cn] = existing.court_id;
       } else {
-        // Create a new courts row for this group physical court
-        const { data: newCourt, error: courtErr } = await supabase
-          .from("courts")
-          .insert({
-            name: `Group Court ${cn}`,
-            session_id: effectiveSessionId,
-          })
-          .select("id")
-          .single();
+        // Reuse the real physical court already created for this session by SetupWizard.
+        // Only create a compatibility court when migrating an old group lacking that unit.
+        const { data: physicalUnit } = await supabase
+          .from("court_units")
+          .select("court_id")
+          .eq("session_id", effectiveSessionId)
+          .eq("type", "court")
+          .eq("court_number", cn)
+          .maybeSingle();
 
-        if (courtErr || !newCourt) {
-          return errorResponse("precheck", `Failed to create court entry for court ${cn}`, courtErr?.message);
+        let physicalCourtId = physicalUnit?.court_id || null;
+        if (!physicalCourtId) {
+          const { data: newCourt, error: courtErr } = await supabase
+            .from("courts")
+            .insert({
+              name: `Group Court ${cn}`,
+              session_id: effectiveSessionId,
+            })
+            .select("id")
+            .single();
+          if (courtErr || !newCourt) {
+            return errorResponse("precheck", `Failed to create court entry for court ${cn}`, courtErr?.message);
+          }
+          physicalCourtId = newCourt.id;
         }
 
-        // Create mapping row
         const { error: mapErr } = await supabase
           .from("group_physical_courts")
-          .insert({
+          .upsert({
             group_id: groupId,
             court_number: cn,
-            court_id: newCourt.id,
+            court_id: physicalCourtId,
             session_id: effectiveSessionId,
-          });
+          }, { onConflict: "group_id,court_number,session_id" });
 
         if (mapErr) {
           return errorResponse("precheck", `Failed to create court mapping for court ${cn}`, mapErr.message);
         }
 
-        courtIdMap[cn] = newCourt.id;
+        courtIdMap[cn] = physicalCourtId;
       }
     }
 

@@ -246,7 +246,7 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
   // Show rank popup after feedback is dismissed
   useEffect(() => {
     if (feedbackSubmitted && hasCompletedAllMatches && selectedPlayerId && playerRank > 0) {
-      const shownKey = `gp_rank_popup_${courtId}_${selectedPlayerId}`;
+      const shownKey = `${storagePrefix}_rank_popup_${selectedPlayerId}`;
       const alreadyShown = localStorage.getItem(shownKey);
       if (!alreadyShown && !showFeedback) {
         setShowRankPopup(true);

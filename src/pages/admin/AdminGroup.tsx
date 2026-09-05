@@ -116,9 +116,10 @@ const AdminGroup = () => {
     enabled: !!group?.id,
   });
 
-  const courtNumbers: number[] = (group?.court_ids?.length ? group.court_ids : null)
-    || groupCourtUnit?.group_court_numbers
-    || [];
+  // Display court numbers come from the session-scoped court unit. court_groups.court_ids
+  // contains database court PKs and must never be treated as display numbers.
+  const courtNumbers: number[] = groupCourtUnit?.group_court_numbers
+    || (group?.court_ids?.length ? group.court_ids.map((_: number, i: number) => i + 1) : []);
   // Map raw court_id → local 1-indexed display number
   const courtDisplayNumber = (cn: number): number => {
     const idx = courtNumbers.indexOf(cn);
@@ -163,12 +164,14 @@ const AdminGroup = () => {
 
   // ── Fetch group_court_state ──
   const { data: courtStates = [] } = useQuery({
-    queryKey: ["group_court_state", groupId],
+    queryKey: ["group_court_state", groupId, sessionId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let stateQuery = supabase
         .from("group_court_state" as any)
         .select("*")
         .eq("group_id", groupId!);
+      if (sessionId) stateQuery = stateQuery.eq("session_id", sessionId);
+      const { data, error } = await stateQuery;
       if (error) throw error;
       return (data || []) as unknown as GroupCourtState[];
     },
@@ -354,44 +357,21 @@ const AdminGroup = () => {
     onError: (err: Error) => toast.error(err.message),
   });
 
-  // Start match on a panel
+  // Start match on a panel atomically on the server. The RPC re-checks player
+  // concurrency inside the same DB transaction, so simultaneous admins cannot race.
   const startMatchOnPanel = useMutation({
     mutationFn: async ({ courtNumber, matchId }: { courtNumber: number; matchId: string }) => {
-      const match = matches.find(m => m.id === matchId);
-      if (!match) throw new Error("Match not found");
-
-      // Check no player in this match is currently playing elsewhere
-      const playerIds = [match.team1_player1_id, match.team1_player2_id, match.team2_player1_id, match.team2_player2_id].filter(Boolean);
-      const liveMatches = matches.filter(m => m.status === "in_progress" && m.id !== matchId);
-      for (const lm of liveMatches) {
-        const livePlayerIds = [lm.team1_player1_id, lm.team1_player2_id, lm.team2_player1_id, lm.team2_player2_id];
-        for (const pid of playerIds) {
-          if (livePlayerIds.includes(pid)) {
-            throw new Error(`${getPlayerName(pid)} is currently playing on another court`);
-          }
-        }
-      }
-
-      // Update match to in_progress
-      const { error: matchErr } = await supabase
-        .from("matches")
-        .update({ status: "in_progress", started_at: new Date().toISOString() })
-        .eq("id", matchId)
-        .eq("status", "pending");
-      if (matchErr) throw matchErr;
-
-      // Update group_court_state
-      const { error: stateErr } = await supabase
-        .from("group_court_state" as any)
-        .update({
-          current_match_id: matchId,
-          current_match_global_index: match.global_match_index,
-          is_live: true,
-          updated_at: new Date().toISOString(),
-        } as any)
-        .eq("group_id", groupId!)
-        .eq("court_number", courtNumber);
-      if (stateErr) throw stateErr;
+      if (!sessionId || !groupId) throw new Error("Active session and group are required");
+      const { data, error } = await supabase.rpc("start_group_match_atomic" as any, {
+        p_session_id: sessionId,
+        p_group_id: groupId,
+        p_court_number: courtNumber,
+        p_match_id: matchId,
+      } as any);
+      if (error) throw error;
+      const result = data as any;
+      if (!result?.ok) throw new Error(result?.error || "Could not start match");
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["group_matches", groupId] });
@@ -401,33 +381,25 @@ const AdminGroup = () => {
     onError: (err: Error) => toast.error(err.message),
   });
 
-  // End match on a panel
+  // End match on a panel atomically on the server. Match score + court state
+  // commit together or not at all.
   const endMatchOnPanel = useMutation({
     mutationFn: async ({ courtNumber, matchId, team1Score, team2Score }: {
       courtNumber: number; matchId: string; team1Score: number; team2Score: number;
     }) => {
-      const { error: matchErr } = await supabase
-        .from("matches")
-        .update({
-          status: "completed",
-          team1_score: team1Score,
-          team2_score: team2Score,
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", matchId);
-      if (matchErr) throw matchErr;
-
-      const { error: stateErr } = await supabase
-        .from("group_court_state" as any)
-        .update({
-          current_match_id: null,
-          current_match_global_index: null,
-          is_live: false,
-          updated_at: new Date().toISOString(),
-        } as any)
-        .eq("group_id", groupId!)
-        .eq("court_number", courtNumber);
-      if (stateErr) throw stateErr;
+      if (!sessionId || !groupId) throw new Error("Active session and group are required");
+      const { data, error } = await supabase.rpc("end_group_match_atomic" as any, {
+        p_session_id: sessionId,
+        p_group_id: groupId,
+        p_court_number: courtNumber,
+        p_match_id: matchId,
+        p_team1_score: team1Score,
+        p_team2_score: team2Score,
+      } as any);
+      if (error) throw error;
+      const result = data as any;
+      if (!result?.ok) throw new Error(result?.error || "Could not end match");
+      return result;
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["group_matches", groupId] });
