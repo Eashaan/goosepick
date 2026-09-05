@@ -312,6 +312,7 @@ export type Database = {
         Row: {
           court_id: number
           created_at: string
+          group_id: string | null
           id: string
           note: string | null
           player_id: string
@@ -321,6 +322,7 @@ export type Database = {
         Insert: {
           court_id: number
           created_at?: string
+          group_id?: string | null
           id?: string
           note?: string | null
           player_id: string
@@ -330,6 +332,7 @@ export type Database = {
         Update: {
           court_id?: number
           created_at?: string
+          group_id?: string | null
           id?: string
           note?: string | null
           player_id?: string
@@ -342,6 +345,13 @@ export type Database = {
             columns: ["court_id"]
             isOneToOne: false
             referencedRelation: "courts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feedback_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "court_groups"
             referencedColumns: ["id"]
           },
           {
@@ -964,6 +974,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      end_group_match_atomic: {
+        Args: {
+          p_court_number: number
+          p_group_id: string
+          p_match_id: string
+          p_session_id: string
+          p_team1_score: number
+          p_team2_score: number
+        }
+        Returns: Json
+      }
       end_match_atomic: {
         Args: {
           p_court_id: number
@@ -983,6 +1004,15 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      start_group_match_atomic: {
+        Args: {
+          p_court_number: number
+          p_group_id: string
+          p_match_id: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
       start_match_atomic: {
         Args: {
           p_court_id: number
