@@ -145,10 +145,14 @@ describe("participant accounts — schema guards", () => {
     // Revoking only from anon would leave the default PUBLIC EXECUTE grant in place.
     expect(sql).not.toMatch(/REVOKE[^;]*ON FUNCTION[^;]*FROM\s+anon\s*;/i);
     // Every SECURITY DEFINER function in this file must be revoked from PUBLIC.
-    const definers = sql.match(/CREATE OR REPLACE FUNCTION public\.(\w+)\([^)]*\)[\s\S]*?SECURITY DEFINER/g) || [];
-    const revokedFromPublic = sql.match(/REVOKE ALL ON FUNCTION public\.\w+\(\) FROM PUBLIC;/g) || [];
-    expect(definers.length).toBeGreaterThan(0);
-    expect(revokedFromPublic.length).toBe(definers.length);
+    const functionBodies = sql.match(/CREATE OR REPLACE FUNCTION public\.\w+\([^)]*\)[\s\S]*?\$\$;/g) || [];
+    const definers = functionBodies
+      .filter((body) => /SECURITY DEFINER/.test(body))
+      .map((body) => body.match(/FUNCTION (public\.\w+\([^)]*\))/)![1]);
+    expect(definers).toEqual([fn]);
+    for (const name of definers) {
+      expect(sql).toContain(`REVOKE ALL ON FUNCTION ${name} FROM PUBLIC;`);
+    }
   });
 
   it("never stores a plaintext claim token", () => {
