@@ -1,244 +1,96 @@
+# Goosepick Accounts & Registrations — Additive Plan
 
+## Goal
+Add a permanent participant identity and ticket-registration layer on top of the existing app, so a paid Shopify ticket becomes an account-linked registration that lands the participant straight into their own roster. Nothing in the current roster, group, rotation, scoring, reset, admin or realtime behavior changes until an explicit cutover.
 
-# Goosepick Social — Implementation Plan
-
-## Overview
-A premium, live-event-ready web app for managing pickleball social mini-leagues across multiple courts. Designed for minimal admin effort and maximum participant engagement.
-
----
-
-## Phase 1: Foundation & Design System
-
-### Design System Setup
-- Configure the strict color palette: Black (#000000), White (#FFFFFF), Goosepick Orange (#FF4200)
-- Implement Apple-like typography, large buttons, rounded corners, subtle shadows
-- Mobile-first responsive breakpoints
-- Add the Goosepick logo to the project assets
-
-### Global Footer
-- "Goosepick Social - February 1, 2026" displayed subtly on every page
-- Consistent premium styling throughout
+Target journey: paid ticket -> registration created -> passwordless sign-in -> My Goosepick -> active experience -> when roster is published, personal roster opens directly (no court/name picking) -> live roster and leaderboard -> past results.
 
 ---
 
-## Phase 2: Database & Backend Setup
+## 1. New data (additive only)
 
-### Supabase Configuration
-- **courts** — 7 pre-seeded courts
-- **players** — (id, court_id, name, created_at)
-- **matches** — Team compositions and scores
-- **court_state** — Current match index, phase (idle/in_progress/completed)
-- **feedback** — Post-match ratings and notes
+New tables, none of which existing code reads:
 
-### Row-Level Security
-- Public read access for viewing rosters/leaderboards
-- Admin write access for player management and scoring
-- Secure feedback submission
+- **participant_profiles** — one row per signed-in person: linked auth user, first/last name, phone, city preference, marketing opt-in, timestamps. Unique on the auth user; unique normalized email; unique normalized phone (nullable).
+- **commerce_orders** — one row per Shopify order: shopify order id (unique), order number, email, phone, currency, total, financial status, raw payload snapshot, processed timestamp. Idempotency lives here.
+- **experience_registrations** — one row per seat: order reference, order line item id, `seat_index` (1..quantity), target session, resolved participant profile (nullable until claimed), state, claim token, cancellation/refund fields. Unique on (order line item id, seat_index) so replayed webhooks cannot duplicate seats. Multi-ticket works from day one at the data level even though the guest-claiming UI comes later.
+- **shopify_session_mappings** — maps immutable Shopify identifiers (product id, variant id, and optionally selling-plan/date-option id) to a Goosepick city/event/locality/date scope, and optionally to a concrete session id. No title or date text parsing anywhere.
+- **players** gains nullable `profile_id` and `registration_id`. Both nullable, no behavior change; rotation, scoring and export keep working on the existing columns.
 
-### Supabase Realtime
-- Enable real-time subscriptions on court_state and matches tables
-- Instant updates for Court Pulse, roadmap state, and leaderboard
+Indexes on: registrations by session, by profile, by state; orders by shopify id; mappings by variant id.
 
----
+## 2. Registration state model
 
-## Phase 3: Home Page
+`pending_payment -> paid -> profile_required -> confirmed -> roster_pending -> roster_ready -> live -> completed`, plus terminal `cancelled` and `refunded`.
 
-### Landing Experience
-- Full black background
-- Centered Goosepick logo (white version)
-- **Primary CTA**: Orange button → "Goosepick Social Roster" → `/public`
-- **Secondary CTA**: Underlined text → "Admin Login" → `/admin/login`
+- `paid` set by the webhook.
+- `profile_required` while no participant profile is linked.
+- `confirmed` once a profile is linked and the session scope is resolved.
+- `roster_pending` / `roster_ready` derived from whether the session has a published roster and a linked player row.
+- `live` / `completed` follow the existing session status.
+- `cancelled` / `refunded` from Shopify cancellation/refund webhooks; these release the seat but never delete history.
 
----
+Derived states (`roster_pending`, `roster_ready`, `live`, `completed`) are computed from session + player linkage rather than stored redundantly, so they can never drift from the operational tables.
 
-## Phase 4: Admin Flow
+## 3. Access rules (RLS)
 
-### Admin Login (`/admin/login`)
-- Password entry: GPS0126 (case-insensitive)
-- Store admin status in localStorage
+- Profiles, orders and registrations: readable and writable only by the owning signed-in participant; admins can read all; the webhook writes with the service role.
+- Phone and email live only on profiles and orders — never on `players`, so the existing public roster reads expose no contact details. This is preserved explicitly.
+- Existing public tables keep their current public read access. Nothing is tightened in this phase.
 
-### Admin Dashboard (`/admin`)
-- Court selector (Courts 1–7)
-- Navigate to individual court management
+## 4. Passwordless participant sign-in
 
-### Court Management (`/admin/court/:courtId`)
+Magic-link / email OTP for participants, added alongside the current email+password admin login. Admin auth, `user_roles` and `has_role`/`is_admin` are untouched; a participant is simply an authenticated user with no admin role. A shared auth listener keeps both flows on one session without changing `useAdminAuth`.
 
-**Section A — Player Management**
-- Add 8–12 unique player names
-- Inline name editing with validation
-- "Players: N" badge after saving
-- **Reset Players**: Requires typed phrase "RESET COURT X" + password GPSC010226
-- Cascading delete (matches first, then players)
+## 5. New pages
 
-**Section B — Rotation & Live Match Control**
-- "Generate Rotation" button (calls Edge Function)
-- **Live Match Controls**:
-  - Start Match → sets phase to in_progress
-  - End Match → save scores, advance index, update phase
-  - Match dropdown for manual override (with confirmation)
+- `/auth` — enter email, receive magic link.
+- `/auth/callback` — completes sign-in, then routes to profile completion or `/my`.
+- `/my/profile` — first-time profile completion (name, phone) when required.
+- `/my` — My Goosepick: active experience card with state-aware messaging, plus past experiences.
+- `/my/experience/:registrationId` — direct personal roster / live roster / leaderboard for that registration, reusing the existing roster and leaderboard components with the player resolved from the registration instead of a dropdown.
 
----
+The current `/public` court selector and name dropdown stay exactly as they are for legacy and non-authenticated participants.
 
-## Phase 5: Rotation Edge Function
+## 6. Admin registration pool
 
-### Server-Side Algorithm
-- Accepts 8–12 players, generates 17 doubles matches
-- **Constraints**:
-  1. No repeat partners
-  2. Maximum 2 consecutive sit-outs
-  3. Balanced match count per player
-  4. Minimize repeat opponents
-- Returns match array with player IDs
-- Stores rotation in matches table
+A registrations panel on the session admin view lists paid registrations for that session and offers one-click "add to roster", which creates the same `players` row the admin already creates today and stamps the new nullable link columns. Rotation, scoring, substitutions, reset and export logic are not modified. Admins can still add walk-ins and guests manually.
 
----
+## 7. Shopify webhook function
 
-## Phase 6: Public Flow
+A single `shopify-webhook` edge function handling `orders/paid`, `orders/cancelled` and `refunds/create`:
 
-### Court Selector (`/public`)
-- Premium court selection grid
-- Navigate to individual court views
+- HMAC signature verification against a stored Shopify webhook secret before any parsing; reject otherwise.
+- Idempotent: insert the order keyed on the Shopify order id; a replay is a no-op.
+- Seat expansion: one registration per line item unit using `seat_index`.
+- Session resolution strictly via `shopify_session_mappings` on immutable product/variant identifiers plus a hidden line-item property carrying the mapping key. Unmapped orders are stored and flagged for admin resolution rather than guessed.
+- Cancellations and refunds move the affected registrations to their terminal state and release seats.
+- Always returns HTTP 200 with a JSON result so Shopify does not retry storms.
 
-### Court View (`/public/court/:courtId`)
+Requires one new secret for the Shopify webhook signing key (added in Project Settings -> Secrets).
 
-**Court Pulse (Always Visible)**
-- Real-time status driven by court_state
-- **In Progress**: "Now Playing" with orange-highlighted teams
-- **Idle**: "Up Next" with upcoming teams
-- **Completed**: "Court Completed"
-- Match counter: "Match X of 17"
+## 8. Deployment sequencing
 
-**Sticky Tab Navigation**
-1. Personal Roster (Default)
-2. Court Roster
-3. Leaderboard
+1. Schema migration (new tables, nullable link columns, access rules) — inert for existing code.
+2. Seed `shopify_session_mappings` for upcoming experiences.
+3. Deploy the webhook function; point Shopify at it and verify with a test order.
+4. Ship participant auth + `/my` pages behind the existing routes; `/public` untouched.
+5. Enable the admin registrations panel.
+6. Cutover of participant entry links only after a full live rehearsal.
+
+## 9. Tests and acceptance
+
+- Webhook: valid signature accepted, invalid rejected, replayed order creates no duplicate seats, quantity 3 creates seats 1-3, unmapped variant is flagged not guessed.
+- Access: a participant cannot read another participant's profile, order or registration; public roster reads return no email/phone.
+- Flow: magic link sign-in -> profile completion -> `/my` shows the active experience -> after roster publication the personal roster opens without any court/name selection.
+- Regression: existing foundation tests, build and the current `/public` and admin flows all still pass unchanged.
 
 ---
 
-## Phase 7: Personal Roster Experience
+## Project-specific risks to flag
 
-### User Identification
-- Dropdown to select your name from players list
-- Saved in localStorage by player_id
-- "Change" option to switch identity
-
-### "You're Up Next" Micro-Nudges
-- **2 matches away**: "You've got time. Stretch or watch the match."
-- **1 match away**: "You're up next. Grab water & be courtside."
-- **Currently playing**: "You're live on Court X."
-- **Finished**: "You're done for today. Nice work 👏"
-
-### Slot Machine Roadmap (Non-Scrollable)
-
-**Core Experience**
-- Fixed viewport window — NO user scrolling
-- Displays match bubbles and sit-out dots
-- State changes trigger smooth vertical slide animations (350–550ms, ease-in-out)
-
-**Display Rules**
-- Current match: Centered orange bubble
-- Single sit-out: Bubble + one dot on connector
-- Double sit-out: Two dots visible with upcoming bubble edge hint
-- Past matches: Grey styling
-- Future matches: Muted styling
-- Active element: Orange highlight (#FF4200)
-
-**Dot Messaging**
-- "Your next tie is after 1 match" / "...after 2 matches"
-
----
-
-## Phase 8: Personal Stats & Downloads
-
-### Live Personal Stats (Collapsible)
-- Title: "Your Goosepick Social – February 1, 2026"
-- **Stats Displayed**:
-  - Matches Played
-  - Wins
-  - Win %
-  - Avg Point Diff / Match
-  - Performance Index (PI = Win% × 100 + Avg Point Diff / Match)
-  - Most Common Partner
-
-### Stats Card Preview & Download
-**Trigger**: When player completes ALL their matches
-
-- Microcopy: "You're done for today 👏"
-- Button: "Preview & Download Your Personal Stats Card"
-- **Modal**: Full-screen preview of branded stats card
-- **Export**: PNG image optimized for Instagram/WhatsApp
-
-### Post-Download Pop-up
-- "Share your day on Instagram and tag us @goosepickleball"
-- CTA: "Got it"
-
----
-
-## Phase 9: Post-Match Feedback
-
-### Feedback Pop-up (Not a Page Section)
-**Trigger**: Immediately when player completes their FINAL match
-
-**Modal Design**:
-- Title: "Quick feedback?"
-- Microcopy: "Your feedback helps us make your next Goosepick Social even better."
-- **Single-tap options**: 😍 Loved it / 🙂 Good / 😐 Okay
-- Optional note field (120 chars max)
-- Primary: "Submit" / Secondary: "Skip" (subtle)
-- Tiny corner X to close
-
-**Data Storage**:
-- Save to feedback table (court_id, player_id, rating, note)
-- Show only once per player per court (flag in database)
-
----
-
-## Phase 10: Court Roster Tab
-
-### Full Schedule View
-- All 17 matches listed in order
-- **Columns**: Team 1 | Team 2 | Team 1 Score | Team 2 Score
-- Real-time score updates via Supabase Realtime
-- Visual indication of current/completed matches
-
----
-
-## Phase 11: Leaderboard Tab
-
-### Performance Index Table
-**Columns (Exact Order)**:
-1. Player Name (sticky column)
-2. Matches
-3. Wins
-4. Win %
-5. Avg Point Diff / Match
-6. Performance Index
-
-**Features**:
-- Sticky header row
-- Sorted by PI descending
-- Includes players with 0 matches
-- Real-time updates
-
----
-
-## Technical Architecture Summary
-
-| Component | Technology |
-|-----------|------------|
-| Frontend | React + TypeScript + Tailwind |
-| Backend | Supabase (Lovable Cloud) |
-| Real-time | Supabase Realtime Subscriptions |
-| Rotation Algorithm | Supabase Edge Function |
-| Image Export | Canvas API → PNG |
-| State Management | React Query + localStorage |
-| Animations | CSS transitions + Framer Motion |
-
----
-
-## Parallel Usage Considerations
-- All database operations scoped by court_id
-- Single-row updates for scoring
-- Optimistic UI with server reconciliation
-- Last-write-wins acceptable for this event format
-
+1. **Ended sessions are frozen.** A trigger blocks all writes to session-scoped tables once a session is `ended`. Linking registrations to `players` must therefore happen while the session is draft or live; the plan keeps registration tables out of that trigger's scope so historical results stay readable and immutable.
+2. **`players` is currently world-writable.** Existing rules allow anyone to insert/update/delete players. That is pre-existing and out of scope here, but once registrations drive rosters it should be tightened — I'd do that as a separate, explicitly-approved step to avoid breaking today's flows.
+3. **Duplicate court groups exist in production.** Earlier repairs left some groups linked through `court_units`. Registration-to-roster assignment will resolve the group the same way the admin UI does today rather than assuming `court_ids` is populated.
+4. **One session per day per scope.** Session identity is city + event + locality + date, and Start Session reuses an ended row. Shopify mappings must therefore resolve to that scope, not to a hardcoded session id, with an optional direct session override.
+5. **Shopify must send a hidden immutable key.** The storefront needs a hidden line-item property (or a dedicated variant per date) so the webhook can resolve the session without text inference. If that cannot be added in Shopify, orders will land in an admin resolution queue instead.
