@@ -45,7 +45,7 @@ describe("foundation regression guards", () => {
     const feedbackFunction = read("supabase/functions/submit-feedback/index.ts");
     expect(feedbackFunction).toContain("session_id");
     expect(feedbackFunction).toContain("group_id");
-    expect(feedbackFunction).toContain("group_id: group_id || null");
+    expect(feedbackFunction).toContain("group_id: resolvedGroupId");
     expect(feedbackFunction).toContain("120 characters or less");
   });
 
