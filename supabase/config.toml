@@ -14,3 +14,8 @@ verify_jwt = false
 
 [functions.reset-ungrouped-court]
 verify_jwt = false
+
+# Shopify cannot send a Supabase JWT; the request is authenticated by the
+# HMAC-SHA256 signature verified inside the function (fail-closed).
+[functions.shopify-order-webhook]
+verify_jwt = false
