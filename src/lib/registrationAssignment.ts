@@ -43,7 +43,7 @@ export interface RegistrationPoolRow {
   created_at: string;
   profile: RegistrationPoolProfile | null;
   purchaser: RegistrationPoolProfile | null;
-  order: { shopify_order_name: string | null; purchaser_email: string | null } | null;
+  commerce_order: { shopify_order_name: string | null; purchaser_email: string | null } | null;
 }
 
 export type RosterTarget =
@@ -92,13 +92,13 @@ export function resolveRosterName(row: {
 export function resolveContactEmail(row: {
   participant_email?: string | null;
   profile?: RegistrationPoolProfile | null;
-  order?: { purchaser_email: string | null } | null;
+  commerce_order?: { purchaser_email: string | null } | null;
   purchaser?: RegistrationPoolProfile | null;
 }): string | null {
   return (
     row.participant_email?.trim() ||
     row.profile?.email?.trim() ||
-    row.order?.purchaser_email?.trim() ||
+    row.commerce_order?.purchaser_email?.trim() ||
     row.purchaser?.email?.trim() ||
     null
   );

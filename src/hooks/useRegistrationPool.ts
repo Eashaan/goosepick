@@ -29,7 +29,7 @@ export interface RegistrationPoolData {
 const POOL_SELECT = `id, session_id, seat_index, status, participant_name, participant_email, profile_id, purchaser_profile_id, created_at,
   profile:participant_profiles!experience_registrations_profile_id_fkey ( first_name, last_name, email ),
   purchaser:participant_profiles!experience_registrations_purchaser_profile_id_fkey ( first_name, last_name, email ),
-  order:commerce_orders ( shopify_order_name, purchaser_email )`;
+  commerce_order:commerce_orders ( shopify_order_name, purchaser_email )`;
 
 /**
  * Admin-only view of the registrations for ONE session and which of them are

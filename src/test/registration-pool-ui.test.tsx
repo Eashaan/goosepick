@@ -37,7 +37,7 @@ const reg = (overrides: Partial<RegistrationPoolRow>): RegistrationPoolRow => ({
   created_at: "2026-09-05T00:00:00Z",
   profile: { first_name: "Asha", last_name: "Mehta", email: "asha@example.com" },
   purchaser: null,
-  order: { shopify_order_name: "#1042", purchaser_email: "asha@example.com" },
+  commerce_order: { shopify_order_name: "#1042", purchaser_email: "asha@example.com" },
   ...overrides,
 });
 

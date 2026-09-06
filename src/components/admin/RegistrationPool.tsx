@@ -31,7 +31,7 @@ const StatusBadge = ({ status }: { status: RegistrationStatus }) => (
 );
 
 const seatLabel = (row: RegistrationPoolRow) => {
-  const order = row.order?.shopify_order_name;
+  const order = row.commerce_order?.shopify_order_name;
   return order ? `Seat ${row.seat_index} · ${order}` : `Seat ${row.seat_index}`;
 };
 

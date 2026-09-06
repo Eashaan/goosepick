@@ -30,7 +30,7 @@ const baseRegistration: RegistrationPoolRow = {
   created_at: "2026-09-05T00:00:00Z",
   profile: { first_name: "Asha", last_name: "Mehta", email: "asha@example.com" },
   purchaser: { first_name: "Rohan", last_name: null, email: "rohan@example.com" },
-  order: { shopify_order_name: "#1042", purchaser_email: "rohan@example.com" },
+  commerce_order: { shopify_order_name: "#1042", purchaser_email: "rohan@example.com" },
 };
 
 /** Fake client that records rpc + insert calls. */
@@ -73,7 +73,7 @@ describe("registration → roster: name + contact resolution", () => {
   it("surfaces an email for the admin without ever writing it to players", () => {
     expect(resolveContactEmail(baseRegistration)).toBe("asha@example.com");
     expect(resolveContactEmail({ ...baseRegistration, profile: null })).toBe("rohan@example.com");
-    expect(resolveContactEmail({ ...baseRegistration, profile: null, order: null, purchaser: null, participant_email: "g@x.com" })).toBe("g@x.com");
+    expect(resolveContactEmail({ ...baseRegistration, profile: null, commerce_order: null, purchaser: null, participant_email: "g@x.com" })).toBe("g@x.com");
   });
 });
 
