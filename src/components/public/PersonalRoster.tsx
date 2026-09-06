@@ -24,9 +24,24 @@ interface PersonalRosterProps {
   courtsInGroup?: number;
   groupId?: string;
   courtIds?: number[];
+  /**
+   * Authenticated My Goosepick routes may lock identity to a server-linked
+   * roster player. When absent, the legacy /public dropdown + localStorage
+   * behavior is unchanged.
+   */
+  lockedPlayerId?: string;
 }
 
-const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup = 1, groupId, courtIds }: PersonalRosterProps) => {
+const PersonalRoster = ({
+  courtId,
+  players,
+  matches,
+  courtState,
+  courtsInGroup = 1,
+  groupId,
+  courtIds,
+  lockedPlayerId,
+}: PersonalRosterProps) => {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [statsOpen, setStatsOpen] = useState(true);
   const [showStatsCard, setShowStatsCard] = useState(false);
@@ -38,16 +53,25 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
   const sessionKey = courtState?.session_id || matches.find(m => m.session_id)?.session_id || "no-session";
   const storagePrefix = `gp_${sessionKey}_${groupId || `court-${courtId}`}`;
 
-  // Load saved player from localStorage
+  // Authenticated registration flow: identity comes from the registration ->
+  // player link. Never write that identity into the legacy public selector key.
+  // Legacy /public flow: continue restoring the user's locally-selected player.
   useEffect(() => {
+    if (lockedPlayerId) {
+      setSelectedPlayerId(players.some((p) => p.id === lockedPlayerId) ? lockedPlayerId : null);
+      return;
+    }
+
     const savedId = localStorage.getItem(`${storagePrefix}_person`);
     if (savedId && players.find(p => p.id === savedId)) {
       setSelectedPlayerId(savedId);
     }
-  }, [storagePrefix, players]);
+  }, [lockedPlayerId, storagePrefix, players]);
 
-  // Save selected player to localStorage
+  // Legacy public-only player selection. Authenticated locked rosters never call
+  // this and therefore never alter the anonymous/public identity key.
   const handlePlayerSelect = (playerId: string) => {
+    if (lockedPlayerId) return;
     setSelectedPlayerId(playerId);
     localStorage.setItem(`${storagePrefix}_person`, playerId);
   };
@@ -67,7 +91,7 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
       }
       return a.match_index - b.match_index;
     });
-  }, [selectedPlayerId, matches]);
+  }, [selectedPlayerId, matches, courtsInGroup]);
 
   // Calculate "You're Up Next" nudge
   const getNudgeMessage = () => {
@@ -287,6 +311,15 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
   const selectedPlayer = players.find(p => p.id === selectedPlayerId);
 
   if (!selectedPlayerId) {
+    // A locked registration should never fall back to the public name chooser.
+    if (lockedPlayerId) {
+      return (
+        <div className="rounded-xl bg-secondary p-5 text-center text-sm text-muted-foreground">
+          Your roster assignment is syncing. Please refresh in a moment.
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-6">
         <div className="text-center">
@@ -326,15 +359,17 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
           <span className="text-sm text-muted-foreground">Playing as</span>
           <p className="text-lg font-semibold">{selectedPlayer?.name}</p>
         </div>
-        <button
-          onClick={() => {
-            setSelectedPlayerId(null);
-            localStorage.removeItem(`${storagePrefix}_person`);
-          }}
-          className="text-primary underline text-sm font-medium hover:text-primary/80 transition-colors"
-        >
-          Change Player
-        </button>
+        {!lockedPlayerId && (
+          <button
+            onClick={() => {
+              setSelectedPlayerId(null);
+              localStorage.removeItem(`${storagePrefix}_person`);
+            }}
+            className="text-primary underline text-sm font-medium hover:text-primary/80 transition-colors"
+          >
+            Change Player
+          </button>
+        )}
       </div>
 
       {/* Nudge message */}
