@@ -1,42 +1,25 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { ChevronRight } from "lucide-react";
 import PageLayout from "@/components/layout/PageLayout";
 import GlobalHeader from "@/components/layout/GlobalHeader";
 import { Button } from "@/components/ui/button";
+import RegistrationStateBadge from "@/components/participant/RegistrationStateBadge";
 import { useParticipantAuth } from "@/hooks/useParticipantAuth";
 import {
   participantDb,
   deriveRegistrationState,
-  REGISTRATION_STATE_LABEL,
+  formatSessionDate,
+  formatSessionPlace,
+  formatSessionTitle,
+  isRegistrationOpenable,
+  REGISTRATION_WITH_SESSION_SELECT,
   type ExperienceRegistrationRow,
   type DerivedRegistrationState,
 } from "@/integrations/supabase/participantDb";
 
 const EXPERIENCES_URL = "https://goosepick.com";
-
-const stateTone: Record<DerivedRegistrationState, string> = {
-  profile_required: "bg-secondary text-foreground",
-  roster_pending: "bg-secondary text-muted-foreground",
-  roster_ready: "bg-primary/15 text-primary",
-  live: "bg-primary text-primary-foreground",
-  completed: "bg-secondary text-muted-foreground",
-  cancelled: "bg-muted text-muted-foreground",
-  refunded: "bg-muted text-muted-foreground",
-  unmapped: "bg-secondary text-muted-foreground",
-};
-
-const formatDate = (value?: string | null) => {
-  if (!value) return "Date to be confirmed";
-  const parsed = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString("en-IN", {
-    weekday: "short",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-};
 
 interface RegistrationWithState {
   registration: ExperienceRegistrationRow;
@@ -53,19 +36,16 @@ const MyGoosepick = () => {
     queryFn: async (): Promise<RegistrationWithState[]> => {
       const { data: rows, error } = await participantDb
         .from("experience_registrations")
-        .select(
-          `id, session_id, profile_id, purchaser_profile_id, seat_index, participant_name, status, created_at,
-           sessions:sessions ( id, date, status, event_type, session_label, cities ( name ), locations ( name ) )`,
-        )
+        .select(REGISTRATION_WITH_SESSION_SELECT)
         .order("created_at", { ascending: false });
 
       if (error) {
-        // Pre-migration or restricted read: show the empty state, never crash.
+        // Restricted read: show the empty state, never crash.
         console.warn("Registration lookup unavailable:", error.message);
         return [];
       }
 
-      const registrations = (rows ?? []) as ExperienceRegistrationRow[];
+      const registrations = (rows ?? []) as unknown as ExperienceRegistrationRow[];
       const ids = registrations.map((r) => r.id);
 
       let rosterLinked = new Set<string>();
@@ -76,7 +56,7 @@ const MyGoosepick = () => {
           .in("registration_id", ids);
         if (!playerError && players) {
           rosterLinked = new Set(
-            (players as { registration_id: string | null }[])
+            players
               .map((p) => p.registration_id)
               .filter((v): v is string => Boolean(v)),
           );
@@ -104,29 +84,45 @@ const MyGoosepick = () => {
 
   const renderCard = ({ registration, state }: RegistrationWithState) => {
     const session = registration.sessions;
-    const title =
-      session?.session_label ||
-      (session?.event_type === "thursdays" ? "Goosepick Thursdays" : "Goosepick Social");
-    const place = [session?.locations?.name, session?.cities?.name].filter(Boolean).join(", ");
+    const title = formatSessionTitle(session);
+    const place = formatSessionPlace(session);
+    const openable = isRegistrationOpenable(state);
+
+    const body = (
+      <>
+        <div className="min-w-0 flex-1 text-left">
+          <p className="truncate text-lg font-semibold text-foreground">{title}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{formatSessionDate(session?.date)}</p>
+          {place && <p className="text-sm text-muted-foreground">{place}</p>}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <RegistrationStateBadge state={state} />
+          {openable && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+        </div>
+      </>
+    );
+
+    if (!openable) {
+      return (
+        <div
+          key={registration.id}
+          className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-card p-5 opacity-80"
+        >
+          {body}
+        </div>
+      );
+    }
 
     return (
-      <div
+      <button
         key={registration.id}
-        className="rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary/40"
+        type="button"
+        onClick={() => navigate(`/my/experience/${registration.id}`)}
+        className="flex w-full items-start justify-between gap-3 rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        aria-label={`Open ${title}`}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate text-lg font-semibold text-foreground">{title}</p>
-            <p className="mt-1 text-sm text-muted-foreground">{formatDate(session?.date)}</p>
-            {place && <p className="text-sm text-muted-foreground">{place}</p>}
-          </div>
-          <span
-            className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${stateTone[state]}`}
-          >
-            {REGISTRATION_STATE_LABEL[state]}
-          </span>
-        </div>
-      </div>
+        {body}
+      </button>
     );
   };
 

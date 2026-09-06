@@ -22,6 +22,7 @@ import { useCourtContextGuard } from "@/hooks/useCourtContextGuard";
 import { useEventContext } from "@/hooks/useEventContext";
 import { useActiveSession } from "@/hooks/useActiveSession";
 import PlayerSwapModal from "@/components/admin/PlayerSwapModal";
+import RegistrationPool from "@/components/admin/RegistrationPool";
 
 type FormatType = "mystery_partner" | "round_robin" | "format_3" | "format_4" | "format_5";
 
@@ -106,7 +107,7 @@ const AdminCourt = () => {
   const { isAdmin, isLoading: authLoading } = useAdminAuth();
   const { isValidating } = useCourtContextGuard(courtNumber);
   const { selectedCityId, selectedLocationId, scopeEventType } = useEventContext();
-  const { activeSession, sessionId: activeSessionId } = useActiveSession();
+  const { activeSession, sessionId: activeSessionId, isEnded: sessionEnded } = useActiveSession();
 
   const [newPlayerName, setNewPlayerName] = useState("");
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
@@ -647,7 +648,14 @@ const AdminCourt = () => {
                                 </>
                               ) : (
                                 <>
-                                  <span className="flex-1">{player.name}</span>
+                                  <span className="flex-1">
+                                    {player.name}
+                                    {player.registration_id && (
+                                      <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                                        Registered
+                                      </span>
+                                    )}
+                                  </span>
                                   <Button
                                     size="icon"
                                     variant="ghost"
@@ -673,6 +681,24 @@ const AdminCourt = () => {
                           ))}
                         </div>
                       )}
+
+                      {/* Paid registrations for this session → normal players rows */}
+                      <RegistrationPool
+                        sessionId={activeSessionId}
+                        target={{ kind: "court", courtId: courtNumber }}
+                        currentPlayerNames={players.map((p) => p.name)}
+                        capacityRemaining={12 - players.length}
+                        disabledReason={
+                          sessionEnded
+                            ? "Archived sessions can't be changed."
+                            : hasRotation
+                              ? "Rotation is locked. Reset the court to change the roster."
+                              : players.length >= 12
+                                ? "This court is full (max 12 players)."
+                                : null
+                        }
+                        onAssigned={() => queryClient.invalidateQueries({ queryKey: ["players", courtNumber] })}
+                      />
 
                       {players.length < 12 && !hasRotation && (
                         <form onSubmit={handleAddPlayer} className="flex gap-2">

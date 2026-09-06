@@ -16,6 +16,7 @@ import GlobalHeader from "@/components/layout/GlobalHeader";
 import AdminContextBanner from "@/components/admin/AdminContextBanner";
 import FormatSelector from "@/components/admin/FormatSelector";
 import PlayerSwapModal from "@/components/admin/PlayerSwapModal";
+import RegistrationPool from "@/components/admin/RegistrationPool";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useActiveSession } from "@/hooks/useActiveSession";
 import { Database } from "@/integrations/supabase/types";
@@ -42,6 +43,7 @@ interface Player {
   group_id: string | null;
   is_guest: boolean;
   added_by_admin: boolean;
+  registration_id?: string | null;
 }
 
 const DURATION_OPTIONS = [
@@ -62,7 +64,7 @@ const AdminGroup = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { isAdmin, isLoading: authLoading } = useAdminAuth();
-  const { sessionId } = useActiveSession();
+  const { sessionId, isEnded: sessionEnded } = useActiveSession();
 
   // Player management state
   const [newPlayerName, setNewPlayerName] = useState("");
@@ -575,6 +577,11 @@ const AdminGroup = () => {
                                       <span className="flex-1">
                                         {player.name}
                                         {player.is_guest && <span className="ml-2 text-xs text-muted-foreground">(Guest)</span>}
+                                        {player.registration_id && (
+                                          <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                                            Registered
+                                          </span>
+                                        )}
                                       </span>
                                       <Button size="icon" variant="ghost" onClick={() => { setEditingPlayerId(player.id); setEditingName(player.name); }}>
                                         <Edit2 className="h-4 w-4" />
@@ -589,6 +596,26 @@ const AdminGroup = () => {
                                 </div>
                               ))}
                             </div>
+                          )}
+
+                          {/* Paid registrations for this session → normal players rows */}
+                          {groupId && (
+                            <RegistrationPool
+                              sessionId={sessionId}
+                              target={{ kind: "group", groupId }}
+                              currentPlayerNames={players.map(p => p.name)}
+                              capacityRemaining={maxPlayers - players.length}
+                              disabledReason={
+                                sessionEnded
+                                  ? "Archived sessions can't be changed."
+                                  : hasRotation
+                                    ? "Rotation is locked. Reset the group to change the roster."
+                                    : players.length >= maxPlayers
+                                      ? `This group is full (max ${maxPlayers} players).`
+                                      : null
+                              }
+                              onAssigned={() => queryClient.invalidateQueries({ queryKey: ["group_players", groupId] })}
+                            />
                           )}
 
                           {players.length < maxPlayers && !hasRotation && (

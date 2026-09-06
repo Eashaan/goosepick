@@ -12,6 +12,7 @@ import AdminContextBanner from "@/components/admin/AdminContextBanner";
 import SetupWizard from "@/components/admin/SetupWizard";
 import SessionSummaryStrip from "@/components/admin/SessionSummaryStrip";
 import SessionLifecycleControls from "@/components/admin/SessionLifecycleControls";
+import { RegistrationPoolSummary } from "@/components/admin/RegistrationPool";
 import CourtStatusCard, { type CourtStatus } from "@/components/admin/CourtStatusCard";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useEventContext } from "@/hooks/useEventContext";
@@ -355,13 +356,15 @@ const AdminDashboard = () => {
 
           {/* Session Summary Strip */}
           {setupCompleted && !showWizard && (
-            <div className="mb-8">
+            <div className="mb-8 space-y-4">
               <SessionSummaryStrip
                 totalCourts={courtCount}
                 groupCount={renderItems.filter((i) => i.type === "group").length}
                 activeCount={activeCount}
                 liveCount={liveCount}
               />
+              {/* Online registrations for this session (paid seats → rosters) */}
+              <RegistrationPoolSummary sessionId={currentSessionId} />
             </div>
           )}
 
