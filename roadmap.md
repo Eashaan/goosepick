@@ -18,7 +18,10 @@
 - [x] `/my/experience/:registrationId` — status-aware page, or the existing roster components with the linked player pre-identified (no court/name selection)
 - [x] MyGoosepick cards link to the experience page
 - [x] Review-only SQL: `db/phase2_registration_assignment.sql` (atomic assignment RPC + registration→player profile sync trigger) — NOT applied
+- [x] Participant deep links (`/my/experience/:id`) survive first-time profile completion
+- [x] Tests: legacy `/public` selection unchanged, assignment writes into `players` with duplicate guard, RLS-scoped registration reads, linked registration bypasses selectors, admin pool UI (55 passing); build + typecheck green
 - [ ] Owner review/apply of `db/phase2_registration_assignment.sql` (client already prefers the RPC and falls back to the guarded direct insert until it exists)
+- [ ] Live check of the admin pool with real Shopify registrations once Phase 3 webhook lands (no test rows were seeded in production)
 
 ## Phase 3 (not started)
 - [ ] Shopify `orders/paid` + cancel/refund webhook function (HMAC, idempotent)
