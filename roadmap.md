@@ -23,7 +23,12 @@
 - [ ] Owner review/apply of `db/phase2_registration_assignment.sql` (client already prefers the RPC and falls back to the guarded direct insert until it exists)
 - [ ] Live check of the admin pool with real Shopify registrations once Phase 3 webhook lands (no test rows were seeded in production)
 
-## Phase 3 (not started)
-- [ ] Shopify `orders/paid` + cancel/refund webhook function (HMAC, idempotent)
-- [ ] Guest seat claim flow (claim token email, purchaser-managed seats)
-- [ ] Admin Shopify mapping management UI
+## Phase 3 — Shopify backend + admin mapping foundation (in progress)
+- [ ] `db/phase3_shopify_webhook_foundation.sql` — webhook event ledger, additive order/registration columns, occurrence key, mapping lookup indexes, admin resolve RPC (dry-run in BEGIN/ROLLBACK, then apply)
+- [ ] Edge Function `shopify-order-webhook` — fail-closed HMAC (SHOPIFY_WEBHOOK_SECRET), shop-domain allowlist, X-Shopify-Webhook-Id idempotency, orders/paid + orders/cancelled + refunds/create
+- [ ] Strict occurrence resolution: explicit `goosepick_session_key` line-item property → mapping; explicit date fallback only when exactly one active mapping; otherwise `unmapped` (never guessed)
+- [ ] Admin Shopify mapping panel on the dashboard (session ↔ product/variant, stable occurrence key, unmapped seat count + attach, webhook events needing review)
+- [ ] `docs/SHOPIFY_EXPERIENCE_INTEGRATION.md` — store-facing contract
+- [ ] Tests: HMAC vectors, duplicate idempotency, non-event ignored, exact key success, missing/invalid key → unmapped, N seats once, multi-ticket purchaser not all participants, full cancel, conservative partial refund
+- [ ] Owner: create Goosepick Shopify app + webhook subscription, set `SHOPIFY_WEBHOOK_SECRET` (blocked on app secret — not done in this phase)
+- [ ] Guest seat claim flow (claim token email, purchaser-managed seats) — later phase
