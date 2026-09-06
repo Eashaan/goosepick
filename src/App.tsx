@@ -18,6 +18,7 @@ import ParticipantLogin from "./pages/participant/ParticipantLogin";
 import AuthCallback from "./pages/participant/AuthCallback";
 import MyGoosepick from "./pages/participant/MyGoosepick";
 import MyProfile from "./pages/participant/MyProfile";
+import MyExperience from "./pages/participant/MyExperience";
 import RequireParticipant from "./pages/participant/RequireParticipant";
 
 const queryClient = new QueryClient();
@@ -55,6 +56,14 @@ const App = () => (
                 element={
                   <RequireParticipant requireCompleteProfile={false}>
                     <MyProfile />
+                  </RequireParticipant>
+                }
+              />
+              <Route
+                path="/my/experience/:registrationId"
+                element={
+                  <RequireParticipant>
+                    <MyExperience />
                   </RequireParticipant>
                 }
               />
