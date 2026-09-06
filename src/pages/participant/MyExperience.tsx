@@ -94,7 +94,7 @@ const MyExperience = () => {
         .eq("session_id", sessionId!)
         .maybeSingle();
       if (error) throw error;
-      return data ?? undefined;
+      return data;
     },
   });
 
@@ -260,9 +260,9 @@ const MyExperience = () => {
   if (courtId) {
     return (
       <RosterShell title={courtDetails?.name || "Your Court"}>
-        <CourtPulse courtState={courtState} matches={courtMatches} players={courtPlayers} totalMatches={courtMatches.length || 17} />
+        <CourtPulse courtState={courtState ?? undefined} matches={courtMatches} players={courtPlayers} totalMatches={courtMatches.length || 17} />
         <RosterTabs>
-          <PersonalRoster courtId={courtId} players={courtPlayers} matches={courtMatches} courtState={courtState} lockedPlayerId={linkedPlayer.id} />
+          <PersonalRoster courtId={courtId} players={courtPlayers} matches={courtMatches} courtState={courtState ?? undefined} lockedPlayerId={linkedPlayer.id} />
           <Leaderboard matches={courtMatches} players={courtPlayers} />
         </RosterTabs>
       </RosterShell>
