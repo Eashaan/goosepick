@@ -151,8 +151,12 @@ BEGIN
 END;
 $fn$;
 
+-- Trigger functions are fired by the system, never called directly, so no
+-- API role needs EXECUTE (the platform adds an explicit authenticated grant
+-- by default — revoke it too).
 REVOKE ALL ON FUNCTION public.link_participant_profile_on_signup() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.link_participant_profile_on_signup() FROM anon;
+REVOKE ALL ON FUNCTION public.link_participant_profile_on_signup() FROM authenticated;
 
 DROP TRIGGER IF EXISTS participant_profiles_link_commerce ON public.participant_profiles;
 CREATE TRIGGER participant_profiles_link_commerce
