@@ -1263,6 +1263,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      assign_registration_to_roster: {
+        Args: {
+          p_court_id?: number
+          p_group_id?: string
+          p_name?: string
+          p_registration_id: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
       current_participant_profile_id: { Args: never; Returns: string }
       end_group_match_atomic: {
         Args: {
