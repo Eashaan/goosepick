@@ -46,6 +46,11 @@ CREATE INDEX IF NOT EXISTS commerce_webhook_events_attention_idx
   ON public.commerce_webhook_events (created_at DESC)
   WHERE status IN ('needs_review', 'error');
 
+-- The platform's default privileges hand new tables to anon/authenticated;
+-- strip those first so the ledger is service_role-write, admin-read only
+-- (RLS below is the primary guard, this is defence in depth).
+REVOKE ALL ON public.commerce_webhook_events FROM anon;
+REVOKE ALL ON public.commerce_webhook_events FROM authenticated;
 GRANT SELECT ON public.commerce_webhook_events TO authenticated;
 GRANT ALL ON public.commerce_webhook_events TO service_role;
 
