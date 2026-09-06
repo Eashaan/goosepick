@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import PageLayout from "@/components/layout/PageLayout";
 import GlobalHeader from "@/components/layout/GlobalHeader";
@@ -19,7 +19,11 @@ const normalizePhone = (raw: string): string | null => {
 
 const MyProfile = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, profile, refreshProfile, isLoading } = useParticipantAuth();
+  // Only ever return to an in-app participant path (set by RequireParticipant).
+  const rawFrom = (location.state as { from?: unknown } | null)?.from;
+  const returnTo = typeof rawFrom === "string" && rawFrom.startsWith("/my") ? rawFrom : "/my";
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
@@ -75,7 +79,7 @@ const MyProfile = () => {
 
     await refreshProfile();
     toast.success("Details saved");
-    navigate("/my", { replace: true });
+    navigate(returnTo, { replace: true });
   };
 
   return (
