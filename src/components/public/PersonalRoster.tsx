@@ -24,10 +24,28 @@ interface PersonalRosterProps {
   courtsInGroup?: number;
   groupId?: string;
   courtIds?: number[];
+  /**
+   * Identity override for signed-in participants: the linked player is known,
+   * so the name dropdown and "Change Player" are skipped and nothing is read
+   * from or written to the legacy localStorage selection. Omit for /public.
+   */
+  fixedPlayerId?: string | null;
+  /** Historical view (ended session): no feedback / rank / podium prompts. */
+  archived?: boolean;
 }
 
-const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup = 1, groupId, courtIds }: PersonalRosterProps) => {
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+const PersonalRoster = ({
+  courtId,
+  players,
+  matches,
+  courtState,
+  courtsInGroup = 1,
+  groupId,
+  courtIds,
+  fixedPlayerId = null,
+  archived = false,
+}: PersonalRosterProps) => {
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(fixedPlayerId ?? null);
   const [statsOpen, setStatsOpen] = useState(true);
   const [showStatsCard, setShowStatsCard] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
@@ -38,13 +56,18 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
   const sessionKey = courtState?.session_id || matches.find(m => m.session_id)?.session_id || "no-session";
   const storagePrefix = `gp_${sessionKey}_${groupId || `court-${courtId}`}`;
 
-  // Load saved player from localStorage
+  // Load saved player from localStorage (legacy /public flow). A fixed player
+  // identity always wins and never touches browser storage.
   useEffect(() => {
+    if (fixedPlayerId) {
+      setSelectedPlayerId(fixedPlayerId);
+      return;
+    }
     const savedId = localStorage.getItem(`${storagePrefix}_person`);
     if (savedId && players.find(p => p.id === savedId)) {
       setSelectedPlayerId(savedId);
     }
-  }, [storagePrefix, players]);
+  }, [storagePrefix, players, fixedPlayerId]);
 
   // Save selected player to localStorage
   const handlePlayerSelect = (playerId: string) => {
@@ -210,6 +233,7 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
 
   // Trigger feedback modal when player completes final match
   useEffect(() => {
+    if (archived) return; // Historical view: never prompt
     const checkFeedback = async () => {
       if (!hasCompletedAllMatches || !selectedPlayerId || feedbackSubmitted) return;
       
@@ -225,10 +249,11 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
     };
     
     checkFeedback();
-  }, [hasCompletedAllMatches, selectedPlayerId, storagePrefix, feedbackSubmitted]);
+  }, [hasCompletedAllMatches, selectedPlayerId, storagePrefix, feedbackSubmitted, archived]);
 
   // Trigger rank popup for selected player when they complete all matches
   useEffect(() => {
+    if (archived) return;
     if (!hasCompletedAllMatches || !selectedPlayerId || playerRank === 0) return;
 
     // Check if rank popup already shown for this player
@@ -244,10 +269,11 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [hasCompletedAllMatches, selectedPlayerId, playerRank, storagePrefix, showFeedback]);
+  }, [hasCompletedAllMatches, selectedPlayerId, playerRank, storagePrefix, showFeedback, archived]);
 
   // Show rank popup after feedback is dismissed
   useEffect(() => {
+    if (archived) return;
     if (feedbackSubmitted && hasCompletedAllMatches && selectedPlayerId && playerRank > 0) {
       const shownKey = `${storagePrefix}_rank_popup_${selectedPlayerId}`;
       const alreadyShown = localStorage.getItem(shownKey);
@@ -255,10 +281,11 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
         setShowRankPopup(true);
       }
     }
-  }, [feedbackSubmitted, hasCompletedAllMatches, selectedPlayerId, playerRank, storagePrefix, showFeedback]);
+  }, [feedbackSubmitted, hasCompletedAllMatches, selectedPlayerId, playerRank, storagePrefix, showFeedback, archived]);
 
   // Fallback: Show podium summary when no player selected but all have at least 1 match
   useEffect(() => {
+    if (archived) return;
     if (selectedPlayerId) return; // Only for anonymous viewers
     if (!allPlayersHaveMatches || players.length === 0) return;
 
@@ -267,7 +294,7 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
     if (alreadyShown) return;
 
     setShowPodiumSummary(true);
-  }, [selectedPlayerId, allPlayersHaveMatches, storagePrefix, players.length]);
+  }, [selectedPlayerId, allPlayersHaveMatches, storagePrefix, players.length, archived]);
 
   const handleRankPopupClose = () => {
     setShowRankPopup(false);
@@ -285,6 +312,14 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
 
   const nudge = getNudgeMessage();
   const selectedPlayer = players.find(p => p.id === selectedPlayerId);
+
+  if (fixedPlayerId && !selectedPlayer) {
+    return (
+      <div className="rounded-xl bg-secondary p-6 text-center">
+        <p className="text-sm text-muted-foreground">Loading your roster...</p>
+      </div>
+    );
+  }
 
   if (!selectedPlayerId) {
     return (
@@ -326,15 +361,17 @@ const PersonalRoster = ({ courtId, players, matches, courtState, courtsInGroup =
           <span className="text-sm text-muted-foreground">Playing as</span>
           <p className="text-lg font-semibold">{selectedPlayer?.name}</p>
         </div>
-        <button
-          onClick={() => {
-            setSelectedPlayerId(null);
-            localStorage.removeItem(`${storagePrefix}_person`);
-          }}
-          className="text-primary underline text-sm font-medium hover:text-primary/80 transition-colors"
-        >
-          Change Player
-        </button>
+        {!fixedPlayerId && (
+          <button
+            onClick={() => {
+              setSelectedPlayerId(null);
+              localStorage.removeItem(`${storagePrefix}_person`);
+            }}
+            className="text-primary underline text-sm font-medium hover:text-primary/80 transition-colors"
+          >
+            Change Player
+          </button>
+        )}
       </div>
 
       {/* Nudge message */}
