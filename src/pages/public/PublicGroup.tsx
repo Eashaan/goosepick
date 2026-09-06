@@ -12,6 +12,7 @@ import PersonalRoster from "@/components/public/PersonalRoster";
 import Leaderboard from "@/components/public/Leaderboard";
 import { useEventContext } from "@/hooks/useEventContext";
 import { useActiveSession } from "@/hooks/useActiveSession";
+import { buildSyntheticGroupCourtState, formatCourtNumbersLabel } from "@/lib/groupRoster";
 import { format } from "date-fns";
 
 const PublicGroup = () => {
@@ -125,27 +126,19 @@ const PublicGroup = () => {
   const syntheticCourtId = group?.court_ids?.[0] ?? 0;
 
   // Build a synthetic courtState from group court states for PersonalRoster nudge logic
-  const syntheticCourtState = useMemo(() => {
-    if (courtStates.length === 0) return undefined;
-    const liveState = courtStates.find(cs => cs.is_live);
-    const currentGlobalIndex = liveState?.current_match_global_index ?? 0;
-    const anyLive = courtStates.some(cs => cs.is_live);
-    const allMatchesDone = matches.length > 0 && matches.every(m => m.status === "completed");
-
-    const N = group?.court_ids?.length || 1;
-    const currentRound = currentGlobalIndex > 0
-      ? Math.floor((currentGlobalIndex - 1) / N)
-      : 0;
-
-    return {
-      id: `synthetic-${resolvedGroupId ?? "group"}`,
-      court_id: syntheticCourtId,
-      current_match_index: currentRound,
-      phase: allMatchesDone ? "completed" as const : anyLive ? "in_progress" as const : "idle" as const,
-      session_id: group?.session_id ?? null,
-      updated_at: new Date().toISOString(),
-    };
-  }, [courtStates, matches, resolvedGroupId, syntheticCourtId, group?.session_id, group?.court_ids?.length]);
+  // (shared with the participant experience page via lib/groupRoster).
+  const syntheticCourtState = useMemo(
+    () =>
+      buildSyntheticGroupCourtState({
+        courtStates,
+        matches,
+        groupId: resolvedGroupId,
+        syntheticCourtId,
+        sessionId: group?.session_id,
+        courtsInGroup: group?.court_ids?.length || 1,
+      }),
+    [courtStates, matches, resolvedGroupId, syntheticCourtId, group?.session_id, group?.court_ids?.length],
+  );
 
   // Realtime subscriptions must also follow the resolved active-session group id.
   useEffect(() => {
@@ -193,12 +186,7 @@ const PublicGroup = () => {
   const groupLabel = useMemo(() => {
     const nums = groupCourtUnit?.group_court_numbers
       || group?.court_ids?.map((_: number, i: number) => i + 1);
-    if (!nums || nums.length === 0) return "Group";
-    if (nums.length === 1) return `Court ${nums[0]}`;
-    if (nums.length === 2) return `Courts ${nums[0]} & ${nums[1]}`;
-    const last = nums[nums.length - 1];
-    const rest = nums.slice(0, -1);
-    return `Courts ${rest.join(", ")} & ${last}`;
+    return formatCourtNumbersLabel(nums, "Group");
   }, [groupCourtUnit?.group_court_numbers, group?.court_ids]);
 
   if (contextLoading || sessionLoading || groupLoading) {
