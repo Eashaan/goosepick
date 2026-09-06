@@ -11,6 +11,7 @@ import AdminLogin from "./pages/admin/AdminLogin";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminCourt from "./pages/admin/AdminCourt";
 import AdminGroup from "./pages/admin/AdminGroup";
+import AdminRegistrations from "./pages/admin/AdminRegistrations";
 import PublicCourtSelector from "./pages/public/PublicCourtSelector";
 import PublicCourt from "./pages/public/PublicCourt";
 import PublicGroup from "./pages/public/PublicGroup";
@@ -18,6 +19,7 @@ import ParticipantLogin from "./pages/participant/ParticipantLogin";
 import AuthCallback from "./pages/participant/AuthCallback";
 import MyGoosepick from "./pages/participant/MyGoosepick";
 import MyProfile from "./pages/participant/MyProfile";
+import MyExperience from "./pages/participant/MyExperience";
 import RequireParticipant from "./pages/participant/RequireParticipant";
 
 const queryClient = new QueryClient();
@@ -34,6 +36,7 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/admin/login" element={<AdminLogin />} />
               <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/registrations" element={<AdminRegistrations />} />
               <Route path="/admin/court/:courtId" element={<AdminCourt />} />
               <Route path="/admin/group/:groupId" element={<AdminGroup />} />
               <Route path="/public" element={<PublicCourtSelector />} />
@@ -55,6 +58,14 @@ const App = () => (
                 element={
                   <RequireParticipant requireCompleteProfile={false}>
                     <MyProfile />
+                  </RequireParticipant>
+                }
+              />
+              <Route
+                path="/my/experience/:registrationId"
+                element={
+                  <RequireParticipant>
+                    <MyExperience />
                   </RequireParticipant>
                 }
               />
