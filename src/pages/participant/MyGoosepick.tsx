@@ -60,7 +60,6 @@ const MyGoosepick = () => {
         .order("created_at", { ascending: false });
 
       if (error) {
-        // Pre-migration or restricted read: show the empty state, never crash.
         console.warn("Registration lookup unavailable:", error.message);
         return [];
       }
@@ -108,17 +107,28 @@ const MyGoosepick = () => {
       session?.session_label ||
       (session?.event_type === "thursdays" ? "Goosepick Thursdays" : "Goosepick Social");
     const place = [session?.locations?.name, session?.cities?.name].filter(Boolean).join(", ");
+    const canOpen = state !== "unmapped";
 
     return (
-      <div
+      <button
+        type="button"
         key={registration.id}
-        className="rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary/40"
+        disabled={!canOpen}
+        onClick={() => canOpen && navigate(`/my/experience/${registration.id}`)}
+        className={`w-full rounded-2xl border border-border bg-card p-5 text-left transition-colors ${
+          canOpen ? "hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" : "cursor-default"
+        }`}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate text-lg font-semibold text-foreground">{title}</p>
             <p className="mt-1 text-sm text-muted-foreground">{formatDate(session?.date)}</p>
             {place && <p className="text-sm text-muted-foreground">{place}</p>}
+            {canOpen && (
+              <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-primary">
+                Open experience →
+              </p>
+            )}
           </div>
           <span
             className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${stateTone[state]}`}
@@ -126,7 +136,7 @@ const MyGoosepick = () => {
             {REGISTRATION_STATE_LABEL[state]}
           </span>
         </div>
-      </div>
+      </button>
     );
   };
 
