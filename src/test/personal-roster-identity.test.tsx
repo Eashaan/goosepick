@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import type { Database } from "@/integrations/supabase/types";
 
 vi.mock("@/integrations/supabase/client", () => ({
@@ -27,41 +28,60 @@ const player = (id: string, name: string): Player => ({
 
 const players = [player("p-asha", "Asha Mehta"), player("p-rohan", "Rohan")];
 
+let container: HTMLDivElement;
+let root: Root;
+
+const mount = (element: React.ReactElement) => {
+  act(() => {
+    root.render(element);
+  });
+  return container.textContent ?? "";
+};
+
 describe("PersonalRoster identity override", () => {
   beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     localStorage.clear();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
   });
 
-  it("legacy /public: asks for a name and remembers the choice in localStorage", () => {
-    render(<PersonalRoster courtId={4} players={players} matches={[]} courtState={undefined} />);
-    expect(screen.getByText("Please select your name in the dropdown below")).toBeInTheDocument();
-    expect(screen.queryByText("Playing as")).not.toBeInTheDocument();
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it("legacy /public: asks for a name when nothing is saved", () => {
+    const text = mount(<PersonalRoster courtId={4} players={players} matches={[]} courtState={undefined} />);
+    expect(text).toContain("Please select your name in the dropdown below");
+    expect(text).not.toContain("Playing as");
   });
 
   it("legacy /public: restores a previously saved player and offers Change Player", () => {
     localStorage.setItem("gp_no-session_court-4_person", "p-rohan");
-    render(<PersonalRoster courtId={4} players={players} matches={[]} courtState={undefined} />);
-    expect(screen.getByText("Playing as")).toBeInTheDocument();
-    expect(screen.getByText("Rohan")).toBeInTheDocument();
-    expect(screen.getByText("Change Player")).toBeInTheDocument();
+    const text = mount(<PersonalRoster courtId={4} players={players} matches={[]} courtState={undefined} />);
+    expect(text).toContain("Playing as");
+    expect(text).toContain("Rohan");
+    expect(text).toContain("Change Player");
   });
 
   it("linked registration: skips the name selector, pins the player, and leaves localStorage alone", () => {
     localStorage.setItem("gp_no-session_court-4_person", "p-rohan"); // stale legacy choice must not win
-    render(
+    const text = mount(
       <PersonalRoster courtId={4} players={players} matches={[]} courtState={undefined} fixedPlayerId="p-asha" archived />,
     );
-    expect(screen.queryByText("Please select your name in the dropdown below")).not.toBeInTheDocument();
-    expect(screen.getByText("Playing as")).toBeInTheDocument();
-    expect(screen.getByText("Asha Mehta")).toBeInTheDocument();
-    expect(screen.queryByText("Change Player")).not.toBeInTheDocument();
+    expect(text).not.toContain("Please select your name in the dropdown below");
+    expect(text).toContain("Playing as");
+    expect(text).toContain("Asha Mehta");
+    expect(text).not.toContain("Change Player");
     // The fixed identity is never persisted over the legacy selection.
     expect(localStorage.getItem("gp_no-session_court-4_person")).toBe("p-rohan");
   });
 
   it("linked registration: shows a loading state until the pinned player is in the roster data", () => {
-    render(<PersonalRoster courtId={4} players={[]} matches={[]} courtState={undefined} fixedPlayerId="p-asha" />);
-    expect(screen.getByText("Loading your roster...")).toBeInTheDocument();
-    expect(screen.queryByText("Please select your name in the dropdown below")).not.toBeInTheDocument();
+    const text = mount(<PersonalRoster courtId={4} players={[]} matches={[]} courtState={undefined} fixedPlayerId="p-asha" />);
+    expect(text).toContain("Loading your roster...");
+    expect(text).not.toContain("Please select your name in the dropdown below");
   });
 });
