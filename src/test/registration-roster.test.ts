@@ -385,3 +385,13 @@ describe("shared group roster helpers (PublicGroup + participant page)", () => {
     expect(deriveRegistrationState({ ...reg, sessions: { ...reg.sessions, status: "ended" } }, true)).toBe("completed");
   });
 });
+
+describe("participant deep links survive first-time profile completion", () => {
+  it("RequireParticipant remembers the intended path and MyProfile returns to it (in-app only)", () => {
+    const guard = read("src/pages/participant/RequireParticipant.tsx");
+    const profile = read("src/pages/participant/MyProfile.tsx");
+    expect(guard).toContain('navigate("/my/profile", { replace: true, state: { from: `${location.pathname}${location.search}` } })');
+    expect(profile).toContain('rawFrom.startsWith("/my") ? rawFrom : "/my"');
+    expect(profile).toContain("navigate(returnTo, { replace: true })");
+  });
+});
