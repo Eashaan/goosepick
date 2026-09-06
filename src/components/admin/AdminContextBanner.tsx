@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useEventContext } from "@/hooks/useEventContext";
 
 interface AdminContextBannerProps {
@@ -17,9 +18,16 @@ const AdminContextBanner = ({ courtName }: AdminContextBannerProps) => {
 
   return (
     <div className="px-4 py-2 bg-secondary/50 border-b border-border">
-      <p className="text-xs text-muted-foreground text-center tracking-wide">
-        {parts.join(" · ")}
-      </p>
+      <div className="mx-auto flex max-w-2xl items-center justify-center gap-3 text-xs tracking-wide">
+        <p className="min-w-0 truncate text-muted-foreground">{parts.join(" · ")}</p>
+        <span className="text-border">|</span>
+        <Link
+          to="/admin/registrations"
+          className="shrink-0 font-semibold text-primary hover:underline"
+        >
+          Registrations
+        </Link>
+      </div>
     </div>
   );
 };
