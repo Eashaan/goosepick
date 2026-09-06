@@ -37,45 +37,63 @@ export type Database = {
       }
       commerce_orders: {
         Row: {
+          cancel_reason: string | null
+          cancelled_at: string | null
           created_at: string
           currency: string | null
           financial_status: string | null
           id: string
+          last_webhook_at: string | null
+          last_webhook_topic: string | null
           processed_at: string | null
           purchaser_email: string | null
+          purchaser_name: string | null
           purchaser_phone: string | null
           purchaser_profile_id: string | null
           raw_payload: Json | null
+          shopify_created_at: string | null
           shopify_order_id: string
           shopify_order_name: string | null
           total_amount: number | null
           updated_at: string
         }
         Insert: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
           created_at?: string
           currency?: string | null
           financial_status?: string | null
           id?: string
+          last_webhook_at?: string | null
+          last_webhook_topic?: string | null
           processed_at?: string | null
           purchaser_email?: string | null
+          purchaser_name?: string | null
           purchaser_phone?: string | null
           purchaser_profile_id?: string | null
           raw_payload?: Json | null
+          shopify_created_at?: string | null
           shopify_order_id: string
           shopify_order_name?: string | null
           total_amount?: number | null
           updated_at?: string
         }
         Update: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
           created_at?: string
           currency?: string | null
           financial_status?: string | null
           id?: string
+          last_webhook_at?: string | null
+          last_webhook_topic?: string | null
           processed_at?: string | null
           purchaser_email?: string | null
+          purchaser_name?: string | null
           purchaser_phone?: string | null
           purchaser_profile_id?: string | null
           raw_payload?: Json | null
+          shopify_created_at?: string | null
           shopify_order_id?: string
           shopify_order_name?: string | null
           total_amount?: number | null
@@ -90,6 +108,69 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      commerce_webhook_events: {
+        Row: {
+          api_version: string | null
+          attempt_count: number
+          created_at: string
+          error: string | null
+          event_id: string | null
+          id: string
+          payload_hash: string
+          processed_at: string | null
+          provider: string
+          raw_payload: Json | null
+          result: Json
+          shop_domain: string | null
+          shopify_order_id: string | null
+          status: string
+          topic: string
+          triggered_at: string | null
+          updated_at: string
+          webhook_id: string
+        }
+        Insert: {
+          api_version?: string | null
+          attempt_count?: number
+          created_at?: string
+          error?: string | null
+          event_id?: string | null
+          id?: string
+          payload_hash: string
+          processed_at?: string | null
+          provider?: string
+          raw_payload?: Json | null
+          result?: Json
+          shop_domain?: string | null
+          shopify_order_id?: string | null
+          status?: string
+          topic: string
+          triggered_at?: string | null
+          updated_at?: string
+          webhook_id: string
+        }
+        Update: {
+          api_version?: string | null
+          attempt_count?: number
+          created_at?: string
+          error?: string | null
+          event_id?: string | null
+          id?: string
+          payload_hash?: string
+          processed_at?: string | null
+          provider?: string
+          raw_payload?: Json | null
+          result?: Json
+          shop_domain?: string | null
+          shopify_order_id?: string | null
+          status?: string
+          topic?: string
+          triggered_at?: string | null
+          updated_at?: string
+          webhook_id?: string
+        }
+        Relationships: []
       }
       court_groups: {
         Row: {
@@ -371,6 +452,8 @@ export type Database = {
           commerce_order_id: string | null
           created_at: string
           id: string
+          line_item_quantity: number | null
+          line_item_title: string | null
           mapping_id: string | null
           participant_email: string | null
           participant_name: string | null
@@ -378,10 +461,14 @@ export type Database = {
           profile_id: string | null
           purchaser_profile_id: string | null
           refunded_at: string | null
+          requested_session_key: string | null
           seat_index: number
           session_id: string | null
           shopify_line_item_id: string
+          shopify_product_id: string | null
+          shopify_variant_id: string | null
           status: string
+          unmapped_reason: string | null
           updated_at: string
         }
         Insert: {
@@ -390,6 +477,8 @@ export type Database = {
           commerce_order_id?: string | null
           created_at?: string
           id?: string
+          line_item_quantity?: number | null
+          line_item_title?: string | null
           mapping_id?: string | null
           participant_email?: string | null
           participant_name?: string | null
@@ -397,10 +486,14 @@ export type Database = {
           profile_id?: string | null
           purchaser_profile_id?: string | null
           refunded_at?: string | null
+          requested_session_key?: string | null
           seat_index: number
           session_id?: string | null
           shopify_line_item_id: string
+          shopify_product_id?: string | null
+          shopify_variant_id?: string | null
           status?: string
+          unmapped_reason?: string | null
           updated_at?: string
         }
         Update: {
@@ -409,6 +502,8 @@ export type Database = {
           commerce_order_id?: string | null
           created_at?: string
           id?: string
+          line_item_quantity?: number | null
+          line_item_title?: string | null
           mapping_id?: string | null
           participant_email?: string | null
           participant_name?: string | null
@@ -416,10 +511,14 @@ export type Database = {
           profile_id?: string | null
           purchaser_profile_id?: string | null
           refunded_at?: string | null
+          requested_session_key?: string | null
           seat_index?: number
           session_id?: string | null
           shopify_line_item_id?: string
+          shopify_product_id?: string | null
+          shopify_variant_id?: string | null
           status?: string
+          unmapped_reason?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1180,6 +1279,7 @@ export type Database = {
           location_id: string | null
           mapping_key: string
           metadata: Json
+          occurrence_key: string | null
           session_date: string
           session_id: string | null
           shopify_product_id: string
@@ -1195,6 +1295,7 @@ export type Database = {
           location_id?: string | null
           mapping_key: string
           metadata?: Json
+          occurrence_key?: string | null
           session_date: string
           session_id?: string | null
           shopify_product_id: string
@@ -1210,6 +1311,7 @@ export type Database = {
           location_id?: string | null
           mapping_key?: string
           metadata?: Json
+          occurrence_key?: string | null
           session_date?: string
           session_id?: string | null
           shopify_product_id?: string
@@ -1263,6 +1365,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_resolve_unmapped_registration: {
+        Args: { p_mapping_id: string; p_registration_id: string }
+        Returns: Json
+      }
+      assign_registration_to_roster: {
+        Args: {
+          p_court_id?: number
+          p_group_id?: string
+          p_name?: string
+          p_registration_id: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
       current_participant_profile_id: { Args: never; Returns: string }
       end_group_match_atomic: {
         Args: {
@@ -1294,6 +1410,7 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      shopify_numeric_id: { Args: { p_id: string }; Returns: string }
       start_group_match_atomic: {
         Args: {
           p_court_number: number
