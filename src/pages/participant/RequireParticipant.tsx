@@ -28,9 +28,10 @@ const RequireParticipant = ({
       return;
     }
     if (requireCompleteProfile && !isProfileComplete && location.pathname !== "/my/profile") {
-      navigate("/my/profile", { replace: true });
+      // Remember deep links (e.g. /my/experience/:id) so the profile page can return to them.
+      navigate("/my/profile", { replace: true, state: { from: `${location.pathname}${location.search}` } });
     }
-  }, [isLoading, user, isProfileComplete, requireCompleteProfile, location.pathname, navigate]);
+  }, [isLoading, user, isProfileComplete, requireCompleteProfile, location.pathname, location.search, navigate]);
 
   if (isLoading || !user) {
     return (
