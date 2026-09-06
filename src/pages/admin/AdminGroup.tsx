@@ -16,6 +16,7 @@ import GlobalHeader from "@/components/layout/GlobalHeader";
 import AdminContextBanner from "@/components/admin/AdminContextBanner";
 import FormatSelector from "@/components/admin/FormatSelector";
 import PlayerSwapModal from "@/components/admin/PlayerSwapModal";
+import RegistrationPool from "@/components/admin/RegistrationPool";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useActiveSession } from "@/hooks/useActiveSession";
 import { Database } from "@/integrations/supabase/types";
@@ -42,6 +43,7 @@ interface Player {
   group_id: string | null;
   is_guest: boolean;
   added_by_admin: boolean;
+  registration_id?: string | null;
 }
 
 const DURATION_OPTIONS = [
@@ -62,7 +64,7 @@ const AdminGroup = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { isAdmin, isLoading: authLoading } = useAdminAuth();
-  const { sessionId } = useActiveSession();
+  const { sessionId, isEnded: sessionEnded } = useActiveSession();
 
   // Player management state
   const [newPlayerName, setNewPlayerName] = useState("");
