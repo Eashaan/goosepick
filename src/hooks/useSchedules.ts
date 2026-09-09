@@ -29,6 +29,25 @@ export const todayIsoDate = (now: Date = new Date()): string => {
   return `${y}-${m}-${d}`;
 };
 
+/**
+ * Resolve the single active events row an admin should be dropped into when
+ * opening a scheduled session. The session's own city is authoritative — the
+ * caller must query events for `session.city_id`, never reuse a context list
+ * scoped to a previously selected city. Ambiguity is surfaced, never guessed.
+ */
+export const resolveSessionTargetEvent = (
+  session: Pick<UpcomingSession, "event_type">,
+  eventRows: { id: string }[],
+): { eventId: string } | { error: "none" | "ambiguous" } => {
+  if (eventRows.length === 1) return { eventId: eventRows[0].id };
+  return { error: eventRows.length === 0 ? "none" : "ambiguous" };
+};
+
+/** Event-table event_type an admin open must match for a scheduled session. */
+export const sessionEventFilterType = (
+  session: Pick<UpcomingSession, "event_type">,
+): "recurring" | "one_off" => (session.event_type === "thursdays" ? "recurring" : "one_off");
+
 export interface UpcomingSessionMapping {
   occurrence_key: string | null;
   shopify_variant_id: string | null;
