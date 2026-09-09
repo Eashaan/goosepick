@@ -431,6 +431,30 @@ export interface EventLineItem {
   quantity: number;
   requestedKey: string | null;
   requestedDate: string | null;
+  /**
+   * Advisory skill level for EVERY seat on this line item. One Shopify line
+   * item carries one property, so a multi-seat line shares the same value.
+   */
+  selectedSkillLevel: string | null;
+}
+
+/**
+ * Skill level for one line item:
+ *  1. the canonical `_goosepick_skill_level` line item property (or the
+ *     non-underscore fallback), then the same property on the order,
+ *  2. otherwise the skill recorded for that exact legacy variant id in the
+ *     static catalogue — only when it is unambiguous,
+ *  3. otherwise null. Titles are never parsed, because a future
+ *     `Mumbai / Bandra` variant title carries no skill at all.
+ */
+export function resolveSelectedSkillLevel(
+  item: ShopifyLineItem,
+  orderLevel: string | null,
+): string | null {
+  const fromProperty = readNamedValue(item.properties ?? null, SKILL_LEVEL_PROPERTY_NAMES) ?? orderLevel;
+  if (fromProperty) return fromProperty;
+  const legacy = findEventVariant(item.product_id, item.variant_id);
+  return cleanString(legacy?.variant.skill);
 }
 
 /**
@@ -445,6 +469,7 @@ export function classifyLineItems(
   let ignoredCount = 0;
   const orderKey = readNamedValue(order.note_attributes ?? null, SESSION_KEY_PROPERTY_NAMES);
   const orderDate = readNamedValue(order.note_attributes ?? null, SESSION_DATE_PROPERTY_NAMES);
+  const orderSkill = readNamedValue(order.note_attributes ?? null, SKILL_LEVEL_PROPERTY_NAMES);
 
   for (const item of order.line_items ?? []) {
     const productId = normalizeShopifyId(item?.product_id);
@@ -474,10 +499,12 @@ export function classifyLineItems(
       quantity,
       requestedKey: readNamedValue(item.properties ?? null, SESSION_KEY_PROPERTY_NAMES) ?? orderKey,
       requestedDate: readNamedValue(item.properties ?? null, SESSION_DATE_PROPERTY_NAMES) ?? orderDate,
+      selectedSkillLevel: resolveSelectedSkillLevel(item, orderSkill),
     });
   }
   return { eventItems, ignoredCount };
 }
+
 
 // ---------------------------------------------------------------------------
 // Occurrence resolution — strict, never a guess
