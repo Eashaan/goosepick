@@ -50,6 +50,7 @@ const SessionLifecycleControls = ({ setupCompleted }: SessionLifecycleControlsPr
   } = useActiveSession();
 
   const [showEndDialog, setShowEndDialog] = useState(false);
+  const [showStartDialog, setShowStartDialog] = useState(false);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetPhrase, setResetPhrase] = useState("");
   const [isExporting, setIsExporting] = useState(false);
@@ -91,6 +92,28 @@ const SessionLifecycleControls = ({ setupCompleted }: SessionLifecycleControlsPr
     setResetPhrase("");
   };
 
+  // Scheduled dates are created ahead of time, so a draft can belong to a future
+  // day. Starting the wrong date would open scoring for an event that isn't today.
+  const now = new Date();
+  const todayIso = `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, "0")}-${`${now.getDate()}`.padStart(2, "0")}`;
+  const sessionDate = activeSession?.date ?? null;
+  const isFutureDate = Boolean(sessionDate && sessionDate > todayIso);
+  const prettyDate = sessionDate
+    ? new Date(`${sessionDate}T12:00:00`).toLocaleDateString("en-US", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+      })
+    : "";
+
+  const handleStart = () => {
+    if (isFutureDate) {
+      setShowStartDialog(true);
+      return;
+    }
+    startSession.mutate();
+  };
+
   const config = sessionStatus ? statusConfig[sessionStatus] : null;
 
   return (
@@ -106,7 +129,7 @@ const SessionLifecycleControls = ({ setupCompleted }: SessionLifecycleControlsPr
       {(!activeSession || isDraft) && setupCompleted && (
         <Button
           size="sm"
-          onClick={() => startSession.mutate()}
+          onClick={handleStart}
           disabled={startSession.isPending}
           className="gap-1.5 h-8 text-xs"
         >
@@ -186,6 +209,30 @@ const SessionLifecycleControls = ({ setupCompleted }: SessionLifecycleControlsPr
           {isExporting ? "Exporting..." : "Export CSV"}
         </Button>
       )}
+
+      {/* Future-date start confirmation */}
+      <AlertDialog open={showStartDialog} onOpenChange={setShowStartDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>This session is for {prettyDate}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Today is not that date. Starting it now opens live scoring for a future event day. Open the
+              right date from Schedule if this isn't the one you meant.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowStartDialog(false);
+                startSession.mutate();
+              }}
+            >
+              Start anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* End Session Dialog */}
       <AlertDialog open={showEndDialog} onOpenChange={setShowEndDialog}>
