@@ -463,6 +463,7 @@ export type Database = {
           refunded_at: string | null
           requested_session_key: string | null
           seat_index: number
+          selected_skill_level: string | null
           session_id: string | null
           shopify_line_item_id: string
           shopify_product_id: string | null
@@ -488,6 +489,7 @@ export type Database = {
           refunded_at?: string | null
           requested_session_key?: string | null
           seat_index: number
+          selected_skill_level?: string | null
           session_id?: string | null
           shopify_line_item_id: string
           shopify_product_id?: string | null
@@ -513,6 +515,7 @@ export type Database = {
           refunded_at?: string | null
           requested_session_key?: string | null
           seat_index?: number
+          selected_skill_level?: string | null
           session_id?: string | null
           shopify_line_item_id?: string
           shopify_product_id?: string | null

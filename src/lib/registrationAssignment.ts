@@ -46,6 +46,9 @@ export interface RegistrationPoolRow {
   shopify_variant_id?: string | null;
   line_item_title?: string | null;
   line_item_quantity?: number | null;
+  /** Advisory skill the customer chose at checkout (display only). */
+  selected_skill_level?: string | null;
+
 
   profile: RegistrationPoolProfile | null;
   purchaser: RegistrationPoolProfile | null;

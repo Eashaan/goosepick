@@ -12,7 +12,12 @@ import {
   type TerminalRosterAttentionRow,
 } from "@/hooks/useRegistrationPool";
 import { useEventCatalog } from "@/hooks/useEventCatalog";
-import { CUSTOMER_SKILL_ADVISORY, customerSelectionChips } from "@/lib/customerSelection";
+import {
+  CUSTOMER_SKILL_ADVISORY,
+  MULTI_SEAT_SKILL_NOTE,
+  customerSelectedSkill,
+  customerSelectionChips,
+} from "@/lib/customerSelection";
 import {
   assignRegistrationToRoster,
   isDuplicateNameError,
@@ -240,14 +245,32 @@ const RegistrationPool = ({
                       {[email, seatLabel(registration)].filter(Boolean).join(" · ")}
                     </p>
                     {(() => {
+                      const skill = customerSelectedSkill(registration, catalog?.products ?? []);
                       const chips = customerSelectionChips(registration, catalog?.products ?? []);
-                      if (chips.length === 0) return null;
+                      const visibleChips = chips.filter((c) => c !== skill);
+                      if (!skill && visibleChips.length === 0) return null;
                       return (
-                        <p className="mt-1 text-[11px] text-muted-foreground" data-testid="customer-selected">
-                          Customer selected: <span className="font-medium text-foreground">{chips.join(" · ")}</span>
-                        </p>
+                        <>
+                          {skill && (
+                            <p className="mt-1 text-[11px] text-muted-foreground" data-testid="customer-selected-skill">
+                              Customer selected skill:{" "}
+                              <span className="font-medium text-foreground">{skill}</span>
+                            </p>
+                          )}
+                          {visibleChips.length > 0 && (
+                            <p className="mt-1 text-[11px] text-muted-foreground" data-testid="customer-selected">
+                              Customer selected: <span className="font-medium text-foreground">{visibleChips.join(" · ")}</span>
+                            </p>
+                          )}
+                          {(registration.line_item_quantity ?? 1) > 1 && (
+                            <p className="mt-1 text-[11px] text-muted-foreground" data-testid="multi-seat-skill-note">
+                              {MULTI_SEAT_SKILL_NOTE}
+                            </p>
+                          )}
+                        </>
                       );
                     })()}
+
                   </div>
 
                   {!editing && (
