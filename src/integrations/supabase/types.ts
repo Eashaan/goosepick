@@ -1369,6 +1369,10 @@ export type Database = {
         Args: { p_mapping_id: string; p_registration_id: string }
         Returns: Json
       }
+      admin_set_shopify_session_date: {
+        Args: { p_date: string; p_session_id: string }
+        Returns: Json
+      }
       assign_registration_to_roster: {
         Args: {
           p_court_id?: number

@@ -308,3 +308,32 @@ in the "Shopify events needing attention" list on the dashboard.
 
 Not done in this phase (by design): storefront theme edit, webhook
 subscription creation, guest seat claim emails.
+
+## Public occurrence feed (`shopify-experience-occurrences`)
+
+Read-only, unauthenticated (`verify_jwt = false`, CORS `*`). The product page
+calls it to list real upcoming dates and sends the chosen `key` back as the
+`_goosepick_session_key` line item property.
+
+```
+GET https://zqslnunbarqnbbnkmyax.functions.supabase.co/shopify-experience-occurrences
+      ?product_id=<numeric product id>[&variant_id=<numeric variant id>]
+
+200 { "ok": true, "product_id": "8555007901886", "variant_id"?: "...",
+      "occurrences": [ { "key": "gp_xxxxxxxx_yyyyyy", "date": "2026-10-01",
+                         "label"?: "Goosepick Social — Early Bird",
+                         "variant_ids": ["48209652089022"], "all_variants": false } ] }
+400 product_id missing/invalid · 404 unknown product · 405 non-GET
+```
+
+Only active mappings with a session that exists, is not ended and is dated today
+or later are returned, grouped by the shared `occurrence_key`. A `variant_id`
+query keeps only occurrences for that exact variant plus product-level mappings.
+No mapping ids, session UUIDs, orders, profiles or PII are ever exposed.
+
+### Scheduling the date
+
+`admin_set_shopify_session_date(p_session_id, p_date)` (admin-only, draft-only)
+sets `sessions.date` and realigns every `shopify_session_mappings.session_date`
+for that session in one transaction. Admins use the "Event date" control in the
+Shopify tickets panel; live/ended sessions are read-only.

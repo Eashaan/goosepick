@@ -229,8 +229,31 @@ export function useShopifyMappingMutations(sessionId: string | null | undefined)
     },
   });
 
-  return { create, setActive, remove, resolveUnmapped };
+  /**
+   * Schedule the real event date on a DRAFT session. The RPC also realigns
+   * every mapping's session_date, so the public occurrence feed and Shopify
+   * stay in step. Refused for live/ended sessions server-side.
+   */
+  const setSessionDate = useMutation({
+    mutationFn: async ({ sessionId: id, date }: { sessionId: string; date: string }) => {
+      const { data, error } = await supabase.rpc("admin_set_shopify_session_date", {
+        p_session_id: id,
+        p_date: date,
+      });
+      if (error) throw error;
+      const result = (data ?? {}) as { ok?: boolean; error?: string; date?: string };
+      if (!result.ok) throw new Error(result.error ?? "Could not update the date");
+      return result;
+    },
+    onSuccess: () => {
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ["active_session"] });
+    },
+  });
+
+  return { create, setActive, remove, resolveUnmapped, setSessionDate };
 }
+
 
 /**
  * Pick the mapping on THIS session that an unmapped seat may be attached to:

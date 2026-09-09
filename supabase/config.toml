@@ -19,3 +19,8 @@ verify_jwt = false
 # HMAC-SHA256 signature verified inside the function (fail-closed).
 [functions.shopify-order-webhook]
 verify_jwt = false
+
+# Public read-only occurrence feed read by the Shopify product page.
+[functions.shopify-experience-occurrences]
+verify_jwt = false
+
