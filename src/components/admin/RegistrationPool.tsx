@@ -239,7 +239,17 @@ const RegistrationPool = ({
                     <p className="truncate text-xs text-muted-foreground">
                       {[email, seatLabel(registration)].filter(Boolean).join(" · ")}
                     </p>
+                    {(() => {
+                      const chips = customerSelectionChips(registration, catalog?.products ?? []);
+                      if (chips.length === 0) return null;
+                      return (
+                        <p className="mt-1 text-[11px] text-muted-foreground" data-testid="customer-selected">
+                          Customer selected: <span className="font-medium text-foreground">{chips.join(" · ")}</span>
+                        </p>
+                      );
+                    })()}
                   </div>
+
                   {!editing && (
                     <Button
                       size="sm"
