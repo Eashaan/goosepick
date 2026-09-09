@@ -18,10 +18,22 @@ const poolState: { data: RegistrationPoolData | undefined; isLoading: boolean; i
   isLoading: false,
   isError: false,
 };
+const attentionState: { data: import("@/hooks/useRegistrationPool").TerminalRosterAttentionRow[] } = { data: [] };
 vi.mock("@/hooks/useRegistrationPool", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/hooks/useRegistrationPool")>();
-  return { ...actual, useRegistrationPool: () => poolState };
+  return {
+    ...actual,
+    useRegistrationPool: () => poolState,
+    useTerminalRosterAttention: () => attentionState,
+  };
 });
+
+const catalogState = { data: { products: [], live: false } as { products: unknown[]; live: boolean } };
+vi.mock("@/hooks/useEventCatalog", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/hooks/useEventCatalog")>();
+  return { ...actual, useEventCatalog: () => catalogState };
+});
+
 
 import RegistrationPool, { RegistrationPoolSummary } from "@/components/admin/RegistrationPool";
 
