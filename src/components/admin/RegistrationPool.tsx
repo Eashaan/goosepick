@@ -339,6 +339,7 @@ export default RegistrationPool;
 /** Compact session-wide registration status for the admin dashboard. */
 export const RegistrationPoolSummary = ({ sessionId }: { sessionId: string | null | undefined }) => {
   const { data, isLoading, isError } = useRegistrationPool(sessionId);
+  const { data: attention = [] } = useTerminalRosterAttention(sessionId);
   if (!sessionId || isLoading || isError || !data) return null;
 
   const total = data.registrations.length;
@@ -346,7 +347,8 @@ export const RegistrationPoolSummary = ({ sessionId }: { sessionId: string | nul
   const waiting = data.waiting;
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4" data-testid="registration-summary">
+    <div className="rounded-xl border border-border bg-card p-4 space-y-3" data-testid="registration-summary">
+
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Ticket className="h-4 w-4 text-primary" />
