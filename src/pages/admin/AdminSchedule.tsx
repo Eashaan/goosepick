@@ -25,6 +25,8 @@ import { useEventContext } from "@/hooks/useEventContext";
 import { useEventCatalog } from "@/hooks/useEventCatalog";
 import {
   pinSession,
+  resolveSessionTargetEvent,
+  sessionEventFilterType,
   todayIsoDate,
   useRecurringSchedules,
   useScheduleExceptions,
