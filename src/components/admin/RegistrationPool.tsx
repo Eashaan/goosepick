@@ -1,11 +1,18 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Check, ChevronDown, ChevronUp, Plus, Ticket, UserPlus } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronUp, Plus, Ticket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { REGISTRATION_POOL_QUERY_KEY, useRegistrationPool } from "@/hooks/useRegistrationPool";
+import {
+  REGISTRATION_POOL_QUERY_KEY,
+  useRegistrationPool,
+  useTerminalRosterAttention,
+  type TerminalRosterAttentionRow,
+} from "@/hooks/useRegistrationPool";
+import { useEventCatalog } from "@/hooks/useEventCatalog";
+import { CUSTOMER_SKILL_ADVISORY, customerSelectionChips } from "@/lib/customerSelection";
 import {
   assignRegistrationToRoster,
   isDuplicateNameError,
@@ -17,6 +24,7 @@ import {
   type RosterTarget,
 } from "@/lib/registrationAssignment";
 import type { RegistrationStatus } from "@/integrations/supabase/participantDb";
+
 
 const STATUS_LABEL: Partial<Record<RegistrationStatus, string>> = {
   paid: "Paid",
