@@ -105,29 +105,28 @@ const AdminSchedule = () => {
    * selected city, so reusing it here can pin a foreign/stale event id.
    */
   const openSession = async (session: UpcomingSession) => {
-    const wantedEventType = session.event_type === "thursdays" ? "recurring" : "one_off";
     const { data: eventRows, error } = await supabase
       .from("events")
       .select("id")
       .eq("city_id", session.city_id)
-      .eq("event_type", wantedEventType)
+      .eq("event_type", sessionEventFilterType(session))
       .eq("active", true);
     if (error) {
       toast.error("Could not load events for this session's city.");
       return;
     }
-    const usable = eventRows ?? [];
-    if (usable.length !== 1) {
-      // Never guess: show the ambiguity instead of pinning a wrong event.
+    const target = resolveSessionTargetEvent(session, eventRows ?? []);
+    if ("error" in target) {
+      // Never guess: show the problem instead of pinning a wrong event.
       toast.error(
-        usable.length === 0
+        target.error === "none"
           ? "No active event found for this session's city."
           : "More than one active event found for this city — resolve it on the home screen first.",
       );
       return;
     }
     setSelectedCityId(session.city_id);
-    setSelectedEventId(usable[0].id);
+    setSelectedEventId(target.eventId);
     setSelectedLocationId(session.event_type === "social" ? null : session.location_id);
     pinSession(session.id);
     navigate("/admin");
