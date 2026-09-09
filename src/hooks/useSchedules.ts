@@ -176,7 +176,7 @@ export function useScheduleMutations() {
     queryClient.invalidateQueries({ queryKey: ["active_session"] });
   };
 
-  const call = async (fn: () => Promise<{ data: unknown; error: unknown }>) => {
+  const call = async (fn: () => PromiseLike<{ data: unknown; error: unknown }>) => {
     const { data, error } = await fn();
     if (error) throw new Error((error as { message?: string }).message || "Request failed");
     const result = asResult(data);
