@@ -188,6 +188,18 @@ const ShopifyMappingPanel = ({ session, isEnded, locationName = null }: ShopifyM
     }
   };
 
+  const isDraft = session.status === "draft";
+
+  const handleSetDate = async () => {
+    if (!dateDraft) return;
+    try {
+      await setSessionDate.mutateAsync({ sessionId: session.id, date: dateDraft });
+      toast.success("Event date saved");
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
+
   const handleAttach = async (seat: UnmappedRegistrationRow, mapping: ShopifyMappingRow) => {
     try {
       await resolveUnmapped.mutateAsync({ registrationId: seat.id, mappingId: mapping.id });
@@ -196,6 +208,7 @@ const ShopifyMappingPanel = ({ session, isEnded, locationName = null }: ShopifyM
       toast.error(errorMessage(err));
     }
   };
+
 
   const unmappedForThisType = unmapped.filter((seat) =>
     products.some((p) => p.productId === normalizeShopifyId(seat.shopify_product_id)),
@@ -290,9 +303,46 @@ const ShopifyMappingPanel = ({ session, isEnded, locationName = null }: ShopifyM
             </section>
           )}
 
+          {/* Event date — what customers pick on the Shopify product page */}
+          <section data-testid="session-date-control">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Event date</p>
+            {isDraft ? (
+              <>
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Input
+                    type="date"
+                    value={dateDraft}
+                    min={todayIso()}
+                    onChange={(e) => setDateDraft(e.target.value)}
+                    className="text-xs sm:max-w-[200px]"
+                    aria-label="Event date"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    disabled={setSessionDate.isPending || !dateDraft || dateDraft === session.date}
+                    onClick={handleSetDate}
+                  >
+                    {setSessionDate.isPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <CalendarDays className="mr-1 h-3.5 w-3.5" />}
+                    Save date
+                  </Button>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  This is the date customers will choose on the Shopify product page. Set it before you link variants — every linked ticket follows this date automatically.
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">{session.date}</span> — the date is locked once the session starts.
+              </p>
+            )}
+          </section>
+
           {/* Occurrence key + storefront instructions */}
           <section>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Session key for the storefront</p>
+
             {occurrenceKey ? (
               <div className="mt-2 flex items-center gap-2">
                 <code className="flex-1 truncate rounded-md bg-secondary px-3 py-2 font-mono text-xs" data-testid="occurrence-key">{occurrenceKey}</code>
