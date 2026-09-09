@@ -81,6 +81,8 @@ describe("RegistrationPool (admin Players card)", () => {
     poolState.data = undefined;
     poolState.isLoading = false;
     poolState.isError = false;
+    attentionState.data = [];
+
   });
 
   afterEach(() => {
