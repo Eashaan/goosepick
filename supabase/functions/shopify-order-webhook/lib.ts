@@ -19,9 +19,12 @@
 import {
   SESSION_DATE_PROPERTY_NAMES,
   SESSION_KEY_PROPERTY_NAMES,
+  SKILL_LEVEL_PROPERTY_NAMES,
+  findEventVariant,
   isKnownEventProduct,
   normalizeShopifyId,
 } from "../_shared/shopify-catalog.ts";
+
 
 // ---------------------------------------------------------------------------
 // Shopify payload shapes (only the fields we read)
@@ -169,7 +172,10 @@ export interface RegistrationInsert {
   line_item_quantity: number;
   requested_session_key: string | null;
   unmapped_reason: string | null;
+  /** Advisory skill the customer picked at checkout; never used for placement. */
+  selected_skill_level: string | null;
 }
+
 
 export interface ExistingRegistration {
   id: string;
