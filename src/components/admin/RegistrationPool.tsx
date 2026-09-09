@@ -106,8 +106,11 @@ const RegistrationPool = ({
 }: RegistrationPoolProps) => {
   const queryClient = useQueryClient();
   const { data, isLoading, isError } = useRegistrationPool(sessionId);
+  const { data: attention = [] } = useTerminalRosterAttention(sessionId);
+  const { data: catalog } = useEventCatalog(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [assignedOpen, setAssignedOpen] = useState(false);
+
 
   const lowerNames = useMemo(
     () => new Set(currentPlayerNames.map((n) => n.trim().toLowerCase())),
