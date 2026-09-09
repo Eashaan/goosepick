@@ -483,20 +483,38 @@ const ShopifyMappingPanel = ({
           {!isEnded && products.length > 0 && (
             <section data-testid="add-variants">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Link variants to this session</p>
+              <p className="mt-1 text-[11px] text-muted-foreground" data-testid="catalog-source">
+                {catalogLoading
+                  ? "Reading the live Shopify ticket list…"
+                  : isLiveCatalog
+                    ? "Live from Shopify — variants added there appear here automatically."
+                    : "Shopify list unavailable — showing the built-in list. Use the variant id box below if a new variant is missing."}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                This session is the authority:{" "}
+                <span className="font-medium text-foreground">
+                  {[cityName, locationName].filter(Boolean).join(" · ") || "city / venue not set"}
+                </span>
+                .
+              </p>
               {products.map((product) => (
                 <div key={product.productId} className="mt-2">
                   <p className="text-xs font-medium">{product.title}</p>
-                  {product.eventType === "thursdays" && (
+                  {product.eventType === "thursdays" && product.structuredDimensions.length === 0 && (
                     <p className="text-[11px] text-muted-foreground">Thursdays variants encode venue + skill level — link only this venue's variants.</p>
                   )}
                   <div className="mt-1.5 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                     {product.variants.map((variant) => {
                       const key = selectionKey(product.productId, variant.variantId);
                       const already = mappedKeys.has(key);
+                      const conflict = conflictKeys.get(key) ?? null;
                       return (
                         <label
                           key={variant.variantId}
-                          className={`flex items-center gap-2 rounded-md border border-border px-2.5 py-1.5 text-xs ${already ? "opacity-60" : "cursor-pointer"}`}
+                          className={`flex items-start gap-2 rounded-md border px-2.5 py-1.5 text-xs ${
+                            conflict ? "border-destructive/50 bg-destructive/5" : "border-border"
+                          } ${already ? "opacity-60" : "cursor-pointer"}`}
+                          data-variant-id={variant.variantId}
                         >
                           <Checkbox
                             checked={already || selected.has(key)}
@@ -504,14 +522,26 @@ const ShopifyMappingPanel = ({
                             onCheckedChange={(on) => toggle(key, on === true)}
                             aria-label={variant.title}
                           />
-                          <span className="truncate">{variant.title}</span>
-                          {already && <Check className="ml-auto h-3.5 w-3.5 text-primary" />}
+                          <span className="min-w-0">
+                            <span className="block truncate">{variant.title}</span>
+                            <span className="block truncate text-[10px] text-muted-foreground">
+                              {describeCatalogVariant(variant)}
+                              {variant.available === false ? " · sold out" : ""}
+                            </span>
+                            {conflict && (
+                              <span className="mt-0.5 block text-[10px] font-medium text-destructive" data-testid="variant-scope-conflict">
+                                Doesn't match this session — {conflict}
+                              </span>
+                            )}
+                          </span>
+                          {already && <Check className="ml-auto h-3.5 w-3.5 shrink-0 text-primary" />}
                         </label>
                       );
                     })}
                   </div>
                 </div>
               ))}
+
               <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
                 <Input
                   value={customVariant}
