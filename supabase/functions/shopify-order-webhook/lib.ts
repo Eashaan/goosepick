@@ -242,6 +242,13 @@ export interface WebhookRepository {
       last_webhook_at: string;
     },
   ): Promise<void>;
+  /**
+   * Capacity vs booked seats per session. Optional so the paid path still works
+   * (without the overrun flag) against older repository implementations.
+   */
+  sessionCapacityStatus?(
+    sessionIds: string[],
+  ): Promise<{ session_id: string; capacity: number | null; booked: number }[]>;
 }
 
 // ---------------------------------------------------------------------------
@@ -1052,7 +1059,29 @@ async function handleOrderPaid(
     terminal_status: sync.terminal,
   };
   if (partiallyRefundedBeforeSeats) result.note = "order was partially refunded before seats were created";
-  const needsReview = sync.unmappedSeats > 0 || partiallyRefundedBeforeSeats;
+
+  // A paid seat is never rejected. If the date is now over its capacity we flag
+  // the event for review so an admin can decide what to do with the extra seat.
+  let overCapacity = false;
+  const sessionIds = Array.from(
+    new Set(sync.rows.map((r) => r.session_id).filter((id): id is string => !!id)),
+  );
+  if (sessionIds.length > 0 && repo.sessionCapacityStatus) {
+    try {
+      const statuses = await repo.sessionCapacityStatus(sessionIds);
+      const overruns = statuses
+        .filter((s) => s.capacity !== null && s.booked > s.capacity)
+        .map((s) => ({ capacity: s.capacity, booked: s.booked }));
+      if (overruns.length > 0) {
+        overCapacity = true;
+        result.capacity_overruns = overruns;
+      }
+    } catch {
+      result.capacity_check = "unavailable";
+    }
+  }
+
+  const needsReview = sync.unmappedSeats > 0 || partiallyRefundedBeforeSeats || overCapacity;
   return { status: needsReview ? "needs_review" : "processed", result, shopifyOrderId };
 }
 
