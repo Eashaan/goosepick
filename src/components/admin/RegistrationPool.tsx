@@ -180,41 +180,6 @@ const RegistrationPool = ({
     assign.mutate({ registration, name });
   };
 
-  const handleAddAll = async () => {
-    if (!data || disabledReason) return;
-    const candidates = data.waiting
-      .filter((r) => drafts[r.id] === undefined)
-      .map((r) => ({ registration: r, name: resolveRosterName(r) }))
-      .filter((c): c is { registration: RegistrationPoolRow; name: string } => Boolean(c.name));
-
-    let added = 0;
-    let skipped = 0;
-    const seen = new Set(lowerNames);
-    for (const candidate of candidates) {
-      if (added >= capacityRemaining) {
-        skipped++;
-        continue;
-      }
-      const key = candidate.name.toLowerCase();
-      if (seen.has(key)) {
-        skipped++;
-        continue;
-      }
-      try {
-        const result = await assign.mutateAsync(candidate);
-        if (result.status === "assigned") {
-          added++;
-          seen.add(key);
-        }
-      } catch {
-        skipped++;
-      }
-    }
-    if (added > 0 || skipped > 0) {
-      toast.message(`Added ${added} player${added === 1 ? "" : "s"} from registrations` + (skipped ? ` · ${skipped} skipped` : ""));
-    }
-  };
-
   if (!sessionId) return null;
   if (isLoading) {
     return <p className="text-xs text-muted-foreground">Checking online registrations...</p>;
@@ -222,12 +187,10 @@ const RegistrationPool = ({
   if (isError || !data) {
     return <p className="text-xs text-muted-foreground">Online registrations are unavailable right now.</p>;
   }
-  if (data.registrations.length === 0) return null;
+  if (data.registrations.length === 0 && attention.length === 0) return null;
 
   const { waiting, assigned } = data;
   const assignedRows = data.registrations.filter((r) => assigned.has(r.id));
-  const namedWaiting = waiting.filter((r) => drafts[r.id] === undefined && resolveRosterName(r));
-  const canBulkAdd = !disabledReason && capacityRemaining > 0 && namedWaiting.length > 1;
 
   return (
     <div className="rounded-lg border border-border bg-background/60 p-3 space-y-3" data-testid="registration-pool">
@@ -239,14 +202,15 @@ const RegistrationPool = ({
             {waiting.length} waiting
           </span>
         </div>
-        {canBulkAdd && (
-          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleAddAll} disabled={assign.isPending}>
-            <UserPlus className="mr-1 h-3 w-3" /> Add all named
-          </Button>
-        )}
       </div>
 
+      <TerminalRosterAttention rows={attention} />
+
+      <p className="text-[11px] text-muted-foreground">{CUSTOMER_SKILL_ADVISORY}</p>
+
       {disabledReason && <p className="text-xs text-muted-foreground">{disabledReason}</p>}
+
+
 
       {waiting.length === 0 ? (
         <p className="text-xs text-muted-foreground">Every registration for this session is on a roster.</p>
