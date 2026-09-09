@@ -17,7 +17,7 @@ export interface OccurrenceMappingRow {
   shopify_product_id: string | null;
   shopify_variant_id: string | null;
   metadata?: unknown;
-  session?: { status?: string | null; date?: string | null } | null;
+  session?: { status?: string | null; date?: string | null; capacity?: number | null } | null;
 }
 
 export interface PublicOccurrence {
@@ -30,6 +30,12 @@ export interface PublicOccurrence {
   variant_ids: string[];
   /** True when a product-level mapping makes every variant valid. */
   all_variants: boolean;
+  /** Seat limit for the date, or null when there is no limit. */
+  capacity: number | null;
+  /** Seats still available, or null when there is no limit. */
+  remaining: number | null;
+  /** True when the seat limit is reached — the storefront should block buying. */
+  sold_out: boolean;
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -49,14 +55,31 @@ const labelFromMetadata = (metadata: unknown): string | null => {
  */
 export function buildPublicOccurrences(
   rows: readonly OccurrenceMappingRow[],
-  options: { productId: string; variantId?: string | null; today?: string },
+  options: {
+    productId: string;
+    variantId?: string | null;
+    today?: string;
+    /** Seats already sold per session id, used to derive remaining seats. */
+    bookedBySession?: Readonly<Record<string, number>>;
+  },
 ): PublicOccurrence[] {
   const productId = normalizeShopifyId(options.productId);
   if (!productId) return [];
   const wantedVariant = normalizeShopifyId(options.variantId ?? null);
   const today = options.today ?? todayIso();
 
-  const grouped = new Map<string, { date: string; label: string | null; variants: Set<string>; all: boolean }>();
+  const booked = options.bookedBySession ?? {};
+  const grouped = new Map<
+    string,
+    {
+      date: string;
+      label: string | null;
+      variants: Set<string>;
+      all: boolean;
+      capacity: number | null;
+      sold: number;
+    }
+  >();
 
   for (const row of rows) {
     if (row.is_active !== true) continue;
@@ -75,8 +98,13 @@ export function buildPublicOccurrences(
     const isProductLevel = variantId === null;
     if (wantedVariant && !isProductLevel && variantId !== wantedVariant) continue;
 
-    const entry = grouped.get(key) ?? { date, label: null, variants: new Set<string>(), all: false };
+    const entry =
+      grouped.get(key) ??
+      { date, label: null, variants: new Set<string>(), all: false, capacity: null, sold: 0 };
     entry.date = date;
+    const capacity = row.session.capacity ?? null;
+    entry.capacity = typeof capacity === "number" && capacity > 0 ? capacity : entry.capacity;
+    entry.sold = Math.max(entry.sold, booked[row.session_id] ?? 0);
     entry.label = entry.label ?? labelFromMetadata(row.metadata);
     if (isProductLevel) entry.all = true;
     else entry.variants.add(variantId);
@@ -91,6 +119,9 @@ export function buildPublicOccurrences(
       ...(entry.label ? { label: entry.label } : {}),
       variant_ids: [...entry.variants].sort(),
       all_variants: entry.all,
+      capacity: entry.capacity,
+      remaining: entry.capacity === null ? null : Math.max(entry.capacity - entry.sold, 0),
+      sold_out: entry.capacity !== null && entry.sold >= entry.capacity,
     });
   }
 
