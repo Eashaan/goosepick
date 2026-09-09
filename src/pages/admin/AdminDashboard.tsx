@@ -13,6 +13,8 @@ import SetupWizard from "@/components/admin/SetupWizard";
 import SessionSummaryStrip from "@/components/admin/SessionSummaryStrip";
 import SessionLifecycleControls from "@/components/admin/SessionLifecycleControls";
 import { RegistrationPoolSummary } from "@/components/admin/RegistrationPool";
+import ShopifyMappingPanel from "@/components/admin/ShopifyMappingPanel";
+
 import CourtStatusCard, { type CourtStatus } from "@/components/admin/CourtStatusCard";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useEventContext } from "@/hooks/useEventContext";
