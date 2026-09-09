@@ -32,3 +32,9 @@
 - [ ] Tests: HMAC vectors, duplicate idempotency, non-event ignored, exact key success, missing/invalid key → unmapped, N seats once, multi-ticket purchaser not all participants, full cancel, conservative partial refund
 - [ ] Owner: create Goosepick Shopify app + webhook subscription, set `SHOPIFY_WEBHOOK_SECRET` (blocked on app secret — not done in this phase)
 - [ ] Guest seat claim flow (claim token email, purchaser-managed seats) — later phase
+
+## Recurring occurrence selection (backend/admin half) — done
+- Public read-only Edge Function `shopify-experience-occurrences` (deployed, verify_jwt=false).
+- Admin-only draft-only RPC `admin_set_shopify_session_date` (applied live).
+- Event date control in ShopifyMappingPanel; mappings inherit `session.date`.
+- Remaining: Shopify theme/product-page date picker (separate turn).
