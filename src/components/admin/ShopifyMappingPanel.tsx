@@ -98,21 +98,36 @@ export const UnmappedSeatsBanner = () => {
 interface ShopifyMappingPanelProps {
   session: ActiveSession | null;
   isEnded: boolean;
-  /** Selected venue name — used only to pre-tick Thursdays variants for that venue. */
+  /** Selected venue name — authoritative venue for this session. */
   locationName?: string | null;
+  /** Selected city name — authoritative city for this session. */
+  cityName?: string | null;
 }
 
 /**
  * Session ↔ Shopify product/variant links ("occurrence mappings"). Lives on
  * the existing admin dashboard; the webhook only ever trusts these rows plus
  * the key the storefront sends — never product titles.
+ *
+ * The variant list comes from the LIVE Shopify catalogue where possible, so
+ * variants created in Shopify after this app shipped (new cities, venues,
+ * levels, ticket tiers) appear without a deploy. When the public catalogue is
+ * unreachable the static list is used instead and links keep working.
  */
-const ShopifyMappingPanel = ({ session, isEnded, locationName = null }: ShopifyMappingPanelProps) => {
+const ShopifyMappingPanel = ({
+  session,
+  isEnded,
+  locationName = null,
+  cityName = null,
+}: ShopifyMappingPanelProps) => {
   const sessionId = session?.id ?? null;
   const { data: mappings = [], isLoading: mappingsLoading, isError: mappingsError } = useSessionMappings(sessionId);
   const { data: unmapped = [] } = useUnmappedRegistrations();
   const { data: attention = [] } = useWebhookAttentionEvents();
   const { create, setActive, remove, resolveUnmapped, setSessionDate } = useShopifyMappingMutations(sessionId);
+  const { data: catalog, isLoading: catalogLoading } = useEventCatalog(
+    (session?.event_type as GoosepickEventType | undefined) ?? null,
+  );
 
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -125,29 +140,48 @@ const ShopifyMappingPanel = ({ session, isEnded, locationName = null }: ShopifyM
     setDateDraft(session?.date ?? "");
   }, [session?.id, session?.date]);
 
-
-  const products = useMemo<ShopifyEventProduct[]>(
-    () => (session ? eventProductsForType(session.event_type as GoosepickEventType) : []),
-    [session],
-  );
+  const products = useMemo<CatalogProduct[]>(() => catalog?.products ?? [], [catalog]);
+  const isLiveCatalog = catalog?.live === true;
   const mappedKeys = useMemo(() => new Set(mappings.map(mappingSelectionKey)), [mappings]);
   const occurrenceKey = mappings.find((m) => m.occurrence_key)?.occurrence_key ?? null;
   const activeCount = mappings.filter((m) => m.is_active).length;
+
+  const sessionScope = useMemo(() => ({ cityName, locationName }), [cityName, locationName]);
+
+  /** Variants whose structured city/venue contradicts the session scope. */
+  const conflictKeys = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const product of products) {
+      for (const variant of product.variants) {
+        const conflicts = scopeConflicts(variant, sessionScope);
+        if (conflicts.length > 0) {
+          map.set(
+            selectionKey(product.productId, variant.variantId),
+            conflicts
+              .map((c) => `${c.dimension === "city" ? "City" : "Venue"} is ${c.found}, session is ${c.expected}`)
+              .join(" · "),
+          );
+        }
+      }
+    }
+    return map;
+  }, [products, sessionScope]);
 
   // Auto-open when something needs attention.
   useEffect(() => {
     if (unmapped.length > 0 || attention.length > 0) setOpen(true);
   }, [unmapped.length, attention.length]);
 
-  // Pre-tick unmapped variants once per session: all Social variants, or the
-  // Thursdays variants for the selected venue.
+  // Pre-tick unmapped variants once per session: everything that matches the
+  // session's city/venue scope. Conflicting variants are never pre-ticked.
   useEffect(() => {
-    if (!session || mappingsLoading || seededFor === session.id) return;
+    if (!session || mappingsLoading || catalogLoading || seededFor === session.id) return;
     const next = new Set<string>();
     for (const product of products) {
       for (const variant of product.variants) {
         const key = selectionKey(product.productId, variant.variantId);
         if (mappedKeys.has(key)) continue;
+        if (conflictKeys.has(key)) continue;
         const venueMatch =
           !variant.venue ||
           (locationName ? locationName.toLowerCase().includes(variant.venue.toLowerCase()) : false);
@@ -156,7 +190,7 @@ const ShopifyMappingPanel = ({ session, isEnded, locationName = null }: ShopifyM
     }
     setSelected(next);
     setSeededFor(session.id);
-  }, [session, products, mappedKeys, mappingsLoading, seededFor, locationName]);
+  }, [session, products, mappedKeys, mappingsLoading, catalogLoading, seededFor, locationName, conflictKeys]);
 
   if (!session) return null;
 
@@ -171,9 +205,28 @@ const ShopifyMappingPanel = ({ session, isEnded, locationName = null }: ShopifyM
 
   const handleLink = async () => {
     const selections: VariantSelection[] = [];
+    const blocked: string[] = [];
     for (const key of selected) {
+      if (conflictKeys.has(key)) {
+        blocked.push(key);
+        continue;
+      }
       const [productId, variant] = key.split(":");
-      selections.push({ productId, variantId: variant === "all" ? null : variant });
+      const variantId = variant === "all" ? null : variant;
+      const found = variantId ? findCatalogVariant(products, productId, variantId) : null;
+      selections.push({
+        productId,
+        variantId,
+        productTitle: found?.product.title ?? null,
+        variantTitle: found?.variant.title ?? null,
+        label: found ? describeCatalogVariant(found.variant) : null,
+      });
+    }
+    if (blocked.length > 0) {
+      toast.error(
+        "Some ticked variants don't match this session's city/venue. Untick them, or use the custom variant id box if you really mean it.",
+      );
+      return;
     }
     const custom = normalizeShopifyId(customVariant);
     if (customVariant.trim() && !custom) {
@@ -183,7 +236,14 @@ const ShopifyMappingPanel = ({ session, isEnded, locationName = null }: ShopifyM
     if (custom) {
       const product = products[0];
       if (!product) return;
-      selections.push({ productId: product.productId, variantId: custom });
+      const found = findCatalogVariant(products, product.productId, custom);
+      selections.push({
+        productId: product.productId,
+        variantId: custom,
+        productTitle: found?.product.title ?? product.title,
+        variantTitle: found?.variant.title ?? null,
+        label: found ? describeCatalogVariant(found.variant) : null,
+      });
     }
     if (selections.length === 0) {
       toast.error("Pick at least one variant to link");
@@ -199,6 +259,7 @@ const ShopifyMappingPanel = ({ session, isEnded, locationName = null }: ShopifyM
       toast.error(errorMessage(err));
     }
   };
+
 
   const isDraft = session.status === "draft";
 
