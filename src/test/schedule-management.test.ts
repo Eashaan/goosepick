@@ -6,6 +6,10 @@ import {
   buildPublicOccurrences,
   type OccurrenceMappingRow,
 } from "../../supabase/functions/shopify-experience-occurrences/lib.ts";
+import {
+  resolveSessionTargetEvent,
+  sessionEventFilterType,
+} from "../../src/hooks/useSchedules";
 import { SHOPIFY_EVENT_PRODUCTS } from "../../supabase/functions/_shared/shopify-catalog.ts";
 
 const ROOT = path.resolve(__dirname, "../..");
@@ -121,5 +125,32 @@ describe("paid seats are never rejected by capacity", () => {
   it("treats the capacity lookup as optional and non-fatal", () => {
     expect(lib).toContain("sessionCapacityStatus?");
     expect(lib).toContain('result.capacity_check = "unavailable"');
+  });
+});
+
+describe("cross-city session opening", () => {
+  it("maps session event types to the events table filter", () => {
+    expect(sessionEventFilterType({ event_type: "thursdays" })).toBe("recurring");
+    expect(sessionEventFilterType({ event_type: "social" })).toBe("one_off");
+  });
+
+  it("resolves exactly one usable event row", () => {
+    expect(
+      resolveSessionTargetEvent({ event_type: "thursdays" }, [{ id: "evt-1" }]),
+    ).toEqual({ eventId: "evt-1" });
+  });
+
+  it("surfaces missing or ambiguous events instead of guessing", () => {
+    expect(resolveSessionTargetEvent({ event_type: "social" }, [])).toEqual({ error: "none" });
+    expect(
+      resolveSessionTargetEvent({ event_type: "thursdays" }, [{ id: "a" }, { id: "b" }]),
+    ).toEqual({ error: "ambiguous" });
+  });
+
+  it("queries events by the session's own city, not the context list", () => {
+    const page = read("src/pages/admin/AdminSchedule.tsx");
+    expect(page).toContain('.eq("city_id", session.city_id)');
+    expect(page).toContain("sessionEventFilterType(session)");
+    expect(page).not.toContain("events.find(");
   });
 });

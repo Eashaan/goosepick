@@ -25,6 +25,8 @@ import { useEventContext } from "@/hooks/useEventContext";
 import { useEventCatalog } from "@/hooks/useEventCatalog";
 import {
   pinSession,
+  resolveSessionTargetEvent,
+  sessionEventFilterType,
   todayIsoDate,
   useRecurringSchedules,
   useScheduleExceptions,
@@ -53,7 +55,7 @@ const statusTone: Record<string, string> = {
 const AdminSchedule = () => {
   const navigate = useNavigate();
   const { isAdmin, isLoading } = useAdminAuth();
-  const { cities, events, locations, setSelectedCityId, setSelectedEventId, setSelectedLocationId } =
+  const { cities, locations, setSelectedCityId, setSelectedEventId, setSelectedLocationId } =
     useEventContext();
 
   useEffect(() => {
@@ -97,19 +99,38 @@ const AdminSchedule = () => {
         (s.city_id === session.city_id && s.location_id === session.location_id),
     );
 
-  /** Pin the exact session and take the admin into the normal dashboard for it. */
-  const openSession = (session: UpcomingSession) => {
-    const event = events.find((e) =>
-      session.event_type === "thursdays" ? e.event_type === "recurring" : e.event_type === "one_off",
-    );
-    setSelectedCityId(session.city_id);
-    if (event) setSelectedEventId(event.id);
-    if (session.location_id) setSelectedLocationId(session.location_id);
-    pinSession(session.id);
-    if (!event) {
-      toast.error("Pick the event on the home screen first.");
+  /**
+   * Pin the exact session and take the admin into the normal dashboard for it.
+   *
+   * Resolves the event directly from the `events` table for the session's own
+   * city — the context `events` list may still be scoped to a previously
+   * selected city, so reusing it here can pin a foreign/stale event id.
+   */
+  const openSession = async (session: UpcomingSession) => {
+    const { data: eventRows, error } = await supabase
+      .from("events")
+      .select("id")
+      .eq("city_id", session.city_id)
+      .eq("event_type", sessionEventFilterType(session))
+      .eq("active", true);
+    if (error) {
+      toast.error("Could not load events for this session's city.");
       return;
     }
+    const target = resolveSessionTargetEvent(session, eventRows ?? []);
+    if ("error" in target) {
+      // Never guess: show the problem instead of pinning a wrong event.
+      toast.error(
+        target.error === "none"
+          ? "No active event found for this session's city."
+          : "More than one active event found for this city — resolve it on the home screen first.",
+      );
+      return;
+    }
+    setSelectedCityId(session.city_id);
+    setSelectedEventId(target.eventId);
+    setSelectedLocationId(session.event_type === "social" ? null : session.location_id);
+    pinSession(session.id);
     navigate("/admin");
   };
 
