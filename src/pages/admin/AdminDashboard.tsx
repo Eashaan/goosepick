@@ -344,7 +344,17 @@ const AdminDashboard = () => {
                 <p className="text-xs text-muted-foreground">Signed in as {user.email}</p>
               )}
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => navigate("/admin/schedule")}
+            >
+              <CalendarDays className="h-3.5 w-3.5" />
+              Schedule
+            </Button>
             {user && <AdminManagement currentUserId={user.id} />}
+
             {setupCompleted && !showEditSetup && !isEnded && (
               <Button variant="ghost" size="icon" onClick={() => setShowEditSetup(true)}>
                 <Settings className="h-5 w-5" />
