@@ -50,10 +50,15 @@ export interface ShopifyPublicProduct {
 
 const DIMENSION_PATTERNS: Array<{ dimension: CatalogDimension; test: RegExp }> = [
   { dimension: "city", test: /^\s*(city|town|metro)\s*$/i },
-  { dimension: "venue", test: /^\s*(venue|location|locality|area|club|court\s*venue)\s*$/i },
+  // `Locality` is the new Thursdays dimension; `Location` / `Venue` stay valid.
+  {
+    dimension: "venue",
+    test: /^\s*(locality|venue|location|area|club|neighbourhood|neighborhood|court\s*venue)\s*$/i,
+  },
   { dimension: "skill", test: /^\s*(skill|skill\s*level|level|rating|grade|band)\s*$/i },
   { dimension: "ticketType", test: /^\s*(ticket\s*type|ticket|tier|pass|type)\s*$/i },
 ];
+
 
 /** Map a Shopify option NAME onto a semantic dimension (null when unknown). */
 export function dimensionForOptionName(name: string): CatalogDimension | null {

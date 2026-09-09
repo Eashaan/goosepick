@@ -501,8 +501,9 @@ const ShopifyMappingPanel = ({
                 <div key={product.productId} className="mt-2">
                   <p className="text-xs font-medium">{product.title}</p>
                   {product.eventType === "thursdays" && product.structuredDimensions.length === 0 && (
-                    <p className="text-[11px] text-muted-foreground">Thursdays variants encode venue + skill level — link only this venue's variants.</p>
+                    <p className="text-[11px] text-muted-foreground">Link only the variants for this session's city and locality. Variants need not carry a skill level.</p>
                   )}
+
                   <div className="mt-1.5 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                     {product.variants.map((variant) => {
                       const key = selectionKey(product.productId, variant.variantId);

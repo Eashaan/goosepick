@@ -61,6 +61,20 @@ export const SESSION_DATE_PROPERTY_NAMES: readonly string[] = [
   "goosepick_session_date",
 ];
 
+/**
+ * Skill level the customer picks on the product page. Canonical key is
+ * `_goosepick_skill_level` (hidden from the customer-facing cart); the
+ * non-underscore form is accepted as a fallback. Advisory ONLY: it is stored on
+ * the registration and shown to the host, never used to place a player.
+ */
+export const SKILL_LEVEL_PROPERTY_NAMES: readonly string[] = [
+  "_goosepick_skill_level",
+  "goosepick_skill_level",
+  "skill level",
+  "skill",
+];
+
+
 const variant = (
   variantId: string,
   title: string,
