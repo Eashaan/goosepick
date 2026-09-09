@@ -112,7 +112,14 @@ export interface VariantSelection {
   productId: string;
   /** null = every variant of the product */
   variantId: string | null;
+  /** Live Shopify product title at link time (snapshot for admin display). */
+  productTitle?: string | null;
+  /** Live Shopify variant title at link time (snapshot for admin display). */
+  variantTitle?: string | null;
+  /** Semantic label, e.g. `Mumbai · Bandra · Intermediate`. */
+  label?: string | null;
 }
+
 
 export interface CreateMappingsInput {
   session: ActiveSession;
