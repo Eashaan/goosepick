@@ -224,6 +224,35 @@ export function createSupabaseWebhookRepository(client: SupabaseClient): Webhook
       return data?.length ?? 0;
     },
 
+    async sessionCapacityStatus(sessionIds) {
+      if (sessionIds.length === 0) return [];
+      const [sessionsRes, seatsRes] = await Promise.all([
+        client.from("sessions").select("id, capacity").in("id", sessionIds),
+        client
+          .from("experience_registrations")
+          .select("session_id")
+          .in("session_id", sessionIds)
+          .in("status", ["paid", "profile_required", "confirmed"])
+          .is("cancelled_at", null)
+          .is("refunded_at", null),
+      ]);
+      if (sessionsRes.error) fail("session capacity", sessionsRes.error);
+      if (seatsRes.error) fail("session booked seats", seatsRes.error);
+      const booked = new Map<string, number>();
+      for (const row of seatsRes.data ?? []) {
+        const id = (row as { session_id: string | null }).session_id;
+        if (id) booked.set(id, (booked.get(id) ?? 0) + 1);
+      }
+      return (sessionsRes.data ?? []).map((row) => {
+        const session = row as { id: string; capacity: number | null };
+        return {
+          session_id: session.id,
+          capacity: session.capacity ?? null,
+          booked: booked.get(session.id) ?? 0,
+        };
+      });
+    },
+
     async updateOrderAfterEvent(shopifyOrderId, patch): Promise<void> {
       const { error } = await client
         .from("commerce_orders")

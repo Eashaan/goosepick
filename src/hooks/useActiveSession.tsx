@@ -72,8 +72,10 @@ export function useActiveSession() {
         if (pinnedError) throw pinnedError;
         if (pinnedData) return pinnedData as ActiveSession;
       }
-
-
+      // Nearest UPCOMING draft by event date. Recurring schedules now generate
+      // many future drafts, so "newest created" would jump to the furthest date.
+      const today = new Date();
+      const todayIso = `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, "0")}-${`${today.getDate()}`.padStart(2, "0")}`;
 
       let draftQuery = supabase
         .from("sessions" as any)
@@ -81,7 +83,8 @@ export function useActiveSession() {
         .eq("city_id", selectedCityId)
         .eq("event_type", scopeEventType!)
         .eq("status", "draft")
-        .order("created_at", { ascending: false })
+        .gte("date", todayIso)
+        .order("date", { ascending: true })
         .limit(1);
       if (selectedLocationId) {
         draftQuery = draftQuery.eq("location_id", selectedLocationId);
@@ -91,6 +94,26 @@ export function useActiveSession() {
       const { data: draftData, error: draftError } = await (draftQuery as any);
       if (draftError) throw draftError;
       if (draftData && draftData.length > 0) return draftData[0] as ActiveSession;
+
+      // Older drafts (date already passed) remain usable rather than vanishing.
+      let pastDraftQuery = supabase
+        .from("sessions" as any)
+        .select("*")
+        .eq("city_id", selectedCityId)
+        .eq("event_type", scopeEventType!)
+        .eq("status", "draft")
+        .lt("date", todayIso)
+        .order("date", { ascending: false })
+        .limit(1);
+      if (selectedLocationId) {
+        pastDraftQuery = pastDraftQuery.eq("location_id", selectedLocationId);
+      } else {
+        pastDraftQuery = pastDraftQuery.is("location_id", null);
+      }
+      const { data: pastDraft, error: pastDraftError } = await (pastDraftQuery as any);
+      if (pastDraftError) throw pastDraftError;
+      if (pastDraft && pastDraft.length > 0) return pastDraft[0] as ActiveSession;
+
 
       // Historical fallback is useful for archive/export UI only when there is no
       // current live or draft session. startSession() will create a NEW session id.

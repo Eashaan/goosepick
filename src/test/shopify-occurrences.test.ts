@@ -40,7 +40,16 @@ describe("public occurrence feed contract", () => {
       { productId: SOCIAL.productId, today: TODAY },
     );
     expect(out).toHaveLength(1);
-    expect(Object.keys(out[0]).sort()).toEqual(["all_variants", "date", "key", "label", "variant_ids"]);
+    expect(Object.keys(out[0]).sort()).toEqual([
+      "all_variants",
+      "capacity",
+      "date",
+      "key",
+      "label",
+      "remaining",
+      "sold_out",
+      "variant_ids",
+    ]);
     expect(out[0].variant_ids.sort()).toEqual(
       [SOCIAL.variants[0].variantId, SOCIAL.variants[1].variantId].sort(),
     );

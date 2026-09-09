@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
     const { data, error } = await supabase
       .from("shopify_session_mappings")
       .select(
-        "occurrence_key, session_date, session_id, is_active, shopify_product_id, shopify_variant_id, metadata, session:sessions!inner ( status, date )",
+        "occurrence_key, session_date, session_id, is_active, shopify_product_id, shopify_variant_id, metadata, session:sessions!inner ( status, date, capacity )",
       )
       .eq("is_active", true)
       .not("session_id", "is", null)
@@ -74,10 +74,36 @@ Deno.serve(async (req) => {
       return json(503, { ok: false, error: "Occurrences temporarily unavailable" });
     }
 
-    const occurrences = buildPublicOccurrences((data ?? []) as unknown as OccurrenceMappingRow[], {
+    const rows = (data ?? []) as unknown as OccurrenceMappingRow[];
+
+    // Seats already sold per session, so a full date can be blocked at checkout.
+    // Counts only — no participant fields are ever selected here.
+    const sessionIds = [...new Set(rows.map((row) => row.session_id).filter(Boolean))] as string[];
+    const bookedBySession: Record<string, number> = {};
+    if (sessionIds.length > 0) {
+      const { data: seats, error: seatsError } = await supabase
+        .from("experience_registrations")
+        .select("session_id")
+        .in("session_id", sessionIds)
+        .in("status", ["paid", "profile_required", "confirmed"])
+        .is("cancelled_at", null)
+        .is("refunded_at", null)
+        .limit(5000);
+      if (seatsError) {
+        console.log(JSON.stringify({ fn: SERVICE, level: "error", code: seatsError.code ?? null }));
+      } else {
+        for (const seat of seats ?? []) {
+          const id = (seat as { session_id: string | null }).session_id;
+          if (id) bookedBySession[id] = (bookedBySession[id] ?? 0) + 1;
+        }
+      }
+    }
+
+    const occurrences = buildPublicOccurrences(rows, {
       productId,
       variantId,
       today,
+      bookedBySession,
     });
 
     return json(200, {

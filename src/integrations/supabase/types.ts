@@ -1090,6 +1090,116 @@ export type Database = {
           },
         ]
       }
+      recurring_experience_exceptions: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          note: string | null
+          schedule_id: string
+          skipped: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          id?: string
+          note?: string | null
+          schedule_id: string
+          skipped?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          note?: string | null
+          schedule_id?: string
+          skipped?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_experience_exceptions_schedule_id_fkey"
+            columns: ["schedule_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_experience_schedules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recurring_experience_schedules: {
+        Row: {
+          city_id: string
+          created_at: string
+          default_capacity: number | null
+          end_date: string | null
+          event_type: Database["public"]["Enums"]["scope_event_type"]
+          horizon_weeks: number
+          id: string
+          is_active: boolean
+          last_error: string | null
+          last_reconciled_at: string | null
+          location_id: string | null
+          shopify_product_id: string
+          shopify_variant_id: string
+          start_date: string | null
+          updated_at: string
+          weekday: number
+        }
+        Insert: {
+          city_id: string
+          created_at?: string
+          default_capacity?: number | null
+          end_date?: string | null
+          event_type?: Database["public"]["Enums"]["scope_event_type"]
+          horizon_weeks?: number
+          id?: string
+          is_active?: boolean
+          last_error?: string | null
+          last_reconciled_at?: string | null
+          location_id?: string | null
+          shopify_product_id: string
+          shopify_variant_id: string
+          start_date?: string | null
+          updated_at?: string
+          weekday?: number
+        }
+        Update: {
+          city_id?: string
+          created_at?: string
+          default_capacity?: number | null
+          end_date?: string | null
+          event_type?: Database["public"]["Enums"]["scope_event_type"]
+          horizon_weeks?: number
+          id?: string
+          is_active?: boolean
+          last_error?: string | null
+          last_reconciled_at?: string | null
+          location_id?: string | null
+          shopify_product_id?: string
+          shopify_variant_id?: string
+          start_date?: string | null
+          updated_at?: string
+          weekday?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_experience_schedules_city_id_fkey"
+            columns: ["city_id"]
+            isOneToOne: false
+            referencedRelation: "cities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_experience_schedules_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rotation_audit: {
         Row: {
           court_id: number
@@ -1217,6 +1327,7 @@ export type Database = {
       }
       sessions: {
         Row: {
+          capacity: number | null
           city_id: string
           created_at: string
           date: string
@@ -1225,11 +1336,13 @@ export type Database = {
           id: string
           is_active: boolean
           location_id: string | null
+          recurring_schedule_id: string | null
           session_label: string | null
           started_at: string | null
           status: Database["public"]["Enums"]["session_status"]
         }
         Insert: {
+          capacity?: number | null
           city_id: string
           created_at?: string
           date?: string
@@ -1238,11 +1351,13 @@ export type Database = {
           id?: string
           is_active?: boolean
           location_id?: string | null
+          recurring_schedule_id?: string | null
           session_label?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["session_status"]
         }
         Update: {
+          capacity?: number | null
           city_id?: string
           created_at?: string
           date?: string
@@ -1251,6 +1366,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           location_id?: string | null
+          recurring_schedule_id?: string | null
           session_label?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["session_status"]
@@ -1268,6 +1384,13 @@ export type Database = {
             columns: ["location_id"]
             isOneToOne: false
             referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sessions_recurring_schedule_id_fkey"
+            columns: ["recurring_schedule_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_experience_schedules"
             referencedColumns: ["id"]
           },
         ]
@@ -1368,12 +1491,57 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_create_social_occurrence: {
+        Args: {
+          p_capacity?: number
+          p_city_id: string
+          p_date: string
+          p_label?: string
+          p_shopify_product_id: string
+          p_variant_ids: string[]
+        }
+        Returns: Json
+      }
+      admin_reconcile_recurring_schedules: {
+        Args: { p_schedule_id?: string }
+        Returns: Json
+      }
       admin_resolve_unmapped_registration: {
         Args: { p_mapping_id: string; p_registration_id: string }
         Returns: Json
       }
+      admin_set_recurring_schedule_active: {
+        Args: { p_active: boolean; p_schedule_id: string }
+        Returns: Json
+      }
+      admin_set_session_capacity: {
+        Args: { p_capacity: number; p_session_id: string }
+        Returns: Json
+      }
       admin_set_shopify_session_date: {
         Args: { p_date: string; p_session_id: string }
+        Returns: Json
+      }
+      admin_skip_recurring_date: {
+        Args: { p_date: string; p_note?: string; p_schedule_id: string }
+        Returns: Json
+      }
+      admin_unskip_recurring_date: {
+        Args: { p_date: string; p_schedule_id: string }
+        Returns: Json
+      }
+      admin_upsert_recurring_schedule: {
+        Args: {
+          p_city_id: string
+          p_default_capacity?: number
+          p_end_date?: string
+          p_horizon_weeks?: number
+          p_location_id: string
+          p_shopify_product_id: string
+          p_shopify_variant_id: string
+          p_start_date?: string
+          p_weekday?: number
+        }
         Returns: Json
       }
       assign_registration_to_roster: {
@@ -1409,6 +1577,7 @@ export type Database = {
         }
         Returns: Json
       }
+      gp_random_token: { Args: { p_len?: number }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1417,6 +1586,15 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      reconcile_recurring_schedules: {
+        Args: { p_schedule_id?: string }
+        Returns: Json
+      }
+      session_booked_seats: { Args: { p_session_id: string }; Returns: number }
+      session_has_operational_data: {
+        Args: { p_session_id: string }
+        Returns: boolean
+      }
       shopify_numeric_id: { Args: { p_id: string }; Returns: string }
       start_group_match_atomic: {
         Args: {
