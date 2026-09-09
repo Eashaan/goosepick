@@ -100,12 +100,19 @@ const ShopifyMappingPanel = ({ session, isEnded, locationName = null }: ShopifyM
   const { data: mappings = [], isLoading: mappingsLoading, isError: mappingsError } = useSessionMappings(sessionId);
   const { data: unmapped = [] } = useUnmappedRegistrations();
   const { data: attention = [] } = useWebhookAttentionEvents();
-  const { create, setActive, remove, resolveUnmapped } = useShopifyMappingMutations(sessionId);
+  const { create, setActive, remove, resolveUnmapped, setSessionDate } = useShopifyMappingMutations(sessionId);
 
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [customVariant, setCustomVariant] = useState("");
   const [seededFor, setSeededFor] = useState<string | null>(null);
+  const [dateDraft, setDateDraft] = useState<string>(session?.date ?? "");
+
+  // Keep the date field in step with the session the dashboard is showing.
+  useEffect(() => {
+    setDateDraft(session?.date ?? "");
+  }, [session?.id, session?.date]);
+
 
   const products = useMemo<ShopifyEventProduct[]>(
     () => (session ? eventProductsForType(session.event_type as GoosepickEventType) : []),
