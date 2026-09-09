@@ -26,10 +26,13 @@ const AdminDashboard = () => {
     selectedCityId,
     selectedEventId,
     selectedLocationId,
+    selectedCity,
+    selectedLocation,
     isContextValid,
     clearSelection,
     scopeEventType,
   } = useEventContext();
+
 
   const {
     sessionConfig,
