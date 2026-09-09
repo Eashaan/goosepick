@@ -368,8 +368,16 @@ const AdminDashboard = () => {
               />
               {/* Online registrations for this session (paid seats → rosters) */}
               <RegistrationPoolSummary sessionId={currentSessionId} />
+              {/* Session ↔ Shopify ticket links (live variant list, session is authoritative) */}
+              <ShopifyMappingPanel
+                session={activeSession}
+                isEnded={isEnded}
+                cityName={selectedCity?.name ?? null}
+                locationName={selectedLocation?.name ?? null}
+              />
             </div>
           )}
+
 
           {showWizard ? (
             <SetupWizard
