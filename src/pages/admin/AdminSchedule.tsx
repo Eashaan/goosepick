@@ -97,19 +97,39 @@ const AdminSchedule = () => {
         (s.city_id === session.city_id && s.location_id === session.location_id),
     );
 
-  /** Pin the exact session and take the admin into the normal dashboard for it. */
-  const openSession = (session: UpcomingSession) => {
-    const event = events.find((e) =>
-      session.event_type === "thursdays" ? e.event_type === "recurring" : e.event_type === "one_off",
-    );
-    setSelectedCityId(session.city_id);
-    if (event) setSelectedEventId(event.id);
-    if (session.location_id) setSelectedLocationId(session.location_id);
-    pinSession(session.id);
-    if (!event) {
-      toast.error("Pick the event on the home screen first.");
+  /**
+   * Pin the exact session and take the admin into the normal dashboard for it.
+   *
+   * Resolves the event directly from the `events` table for the session's own
+   * city — the context `events` list may still be scoped to a previously
+   * selected city, so reusing it here can pin a foreign/stale event id.
+   */
+  const openSession = async (session: UpcomingSession) => {
+    const wantedEventType = session.event_type === "thursdays" ? "recurring" : "one_off";
+    const { data: eventRows, error } = await supabase
+      .from("events")
+      .select("id")
+      .eq("city_id", session.city_id)
+      .eq("event_type", wantedEventType)
+      .eq("active", true);
+    if (error) {
+      toast.error("Could not load events for this session's city.");
       return;
     }
+    const usable = eventRows ?? [];
+    if (usable.length !== 1) {
+      // Never guess: show the ambiguity instead of pinning a wrong event.
+      toast.error(
+        usable.length === 0
+          ? "No active event found for this session's city."
+          : "More than one active event found for this city — resolve it on the home screen first.",
+      );
+      return;
+    }
+    setSelectedCityId(session.city_id);
+    setSelectedEventId(usable[0].id);
+    setSelectedLocationId(session.event_type === "social" ? null : session.location_id);
+    pinSession(session.id);
     navigate("/admin");
   };
 
