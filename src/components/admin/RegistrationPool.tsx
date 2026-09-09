@@ -360,8 +360,10 @@ export const RegistrationPoolSummary = ({ sessionId }: { sessionId: string | nul
             : `${total} paid · ${onRosters} on rosters · ${waiting.length} waiting`}
         </p>
       </div>
+      <TerminalRosterAttention rows={attention} />
       {waiting.length > 0 && (
         <>
+
           <div className="mt-3 flex flex-wrap gap-1.5">
             {waiting.map((r) => {
               const name = resolveRosterName(r);
