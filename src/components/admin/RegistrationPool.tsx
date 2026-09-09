@@ -43,6 +43,42 @@ const seatLabel = (row: RegistrationPoolRow) => {
   return order ? `Seat ${row.seat_index} · ${order}` : `Seat ${row.seat_index}`;
 };
 
+/**
+ * Read-only banner: a cancelled/refunded seat still has a roster player.
+ * Nothing is ever changed automatically — no player removal, no rebalance, no
+ * court/group/rotation/session mutation. A human reviews the placement.
+ */
+export const TerminalRosterAttention = ({ rows }: { rows: readonly TerminalRosterAttentionRow[] }) => {
+  if (rows.length === 0) return null;
+  return (
+    <div
+      className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs"
+      data-testid="terminal-roster-attention"
+    >
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
+        <p className="font-semibold text-foreground">
+          {rows.length} refunded/cancelled participant{rows.length === 1 ? " is" : "s are"} still on a roster.
+        </p>
+      </div>
+      <p className="mt-1 text-muted-foreground">
+        Nothing was changed automatically — review placement manually.
+      </p>
+      <ul className="mt-2 space-y-1">
+        {rows.map((row) => (
+          <li key={row.registrationId} className="flex items-center justify-between gap-2">
+            <span className="truncate font-medium">{row.playerName}</span>
+            <span className="shrink-0 text-muted-foreground">
+              {row.status === "refunded" ? "Refunded" : "Cancelled"} · {row.unitLabel}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+
 interface RegistrationPoolProps {
   sessionId: string | null | undefined;
   target: RosterTarget;
