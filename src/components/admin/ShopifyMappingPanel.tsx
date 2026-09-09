@@ -30,19 +30,27 @@ import {
   type WebhookAttentionRow,
 } from "@/hooks/useShopifyMappings";
 import {
+  findCatalogVariant,
+  scopeConflicts,
+  useEventCatalog,
+} from "@/hooks/useEventCatalog";
+import {
+  describeCatalogVariant,
+  type CatalogProduct,
+} from "../../../supabase/functions/shopify-event-catalog/lib";
+import {
   STOREFRONT_SESSION_KEY_PROPERTY,
   describeUnmappedReason,
   describeVariant,
-  eventProductsForType,
   normalizeShopifyId,
   type GoosepickEventType,
-  type ShopifyEventProduct,
 } from "@/lib/shopifyCatalog";
 
 export const SHOPIFY_PANEL_ANCHOR = "shopify-tickets";
 
 /** Local ISO date (YYYY-MM-DD) used as the earliest selectable event date. */
 const todayIso = () => new Date().toISOString().slice(0, 10);
+
 
 const selectionKey = (productId: string, variantId: string | null) =>
   `${productId}:${variantId ?? "all"}`;
