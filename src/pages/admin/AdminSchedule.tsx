@@ -53,7 +53,7 @@ const statusTone: Record<string, string> = {
 const AdminSchedule = () => {
   const navigate = useNavigate();
   const { isAdmin, isLoading } = useAdminAuth();
-  const { cities, events, locations, setSelectedCityId, setSelectedEventId, setSelectedLocationId } =
+  const { cities, locations, setSelectedCityId, setSelectedEventId, setSelectedLocationId } =
     useEventContext();
 
   useEffect(() => {
