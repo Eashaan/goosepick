@@ -24,3 +24,8 @@ verify_jwt = false
 [functions.shopify-experience-occurrences]
 verify_jwt = false
 
+# Public read-only Shopify product/variant catalogue read by the admin panel.
+[functions.shopify-event-catalog]
+verify_jwt = false
+
+
