@@ -41,10 +41,18 @@ export interface RegistrationPoolRow {
   profile_id: string | null;
   purchaser_profile_id: string | null;
   created_at: string;
+  /** What the customer actually bought on Shopify (checkout snapshot, display only). */
+  shopify_product_id?: string | null;
+  shopify_variant_id?: string | null;
+  line_item_title?: string | null;
+  line_item_quantity?: number | null;
+
   profile: RegistrationPoolProfile | null;
   purchaser: RegistrationPoolProfile | null;
   commerce_order: { shopify_order_name: string | null; purchaser_email: string | null } | null;
+  mapping?: { metadata: unknown } | null;
 }
+
 
 export type RosterTarget =
   | { kind: "court"; courtId: number }

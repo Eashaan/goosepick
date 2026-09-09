@@ -13,6 +13,8 @@ import SetupWizard from "@/components/admin/SetupWizard";
 import SessionSummaryStrip from "@/components/admin/SessionSummaryStrip";
 import SessionLifecycleControls from "@/components/admin/SessionLifecycleControls";
 import { RegistrationPoolSummary } from "@/components/admin/RegistrationPool";
+import ShopifyMappingPanel from "@/components/admin/ShopifyMappingPanel";
+
 import CourtStatusCard, { type CourtStatus } from "@/components/admin/CourtStatusCard";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useEventContext } from "@/hooks/useEventContext";
@@ -26,10 +28,13 @@ const AdminDashboard = () => {
     selectedCityId,
     selectedEventId,
     selectedLocationId,
+    selectedCity,
+    selectedLocation,
     isContextValid,
     clearSelection,
     scopeEventType,
   } = useEventContext();
+
 
   const {
     sessionConfig,
@@ -365,8 +370,16 @@ const AdminDashboard = () => {
               />
               {/* Online registrations for this session (paid seats → rosters) */}
               <RegistrationPoolSummary sessionId={currentSessionId} />
+              {/* Session ↔ Shopify ticket links (live variant list, session is authoritative) */}
+              <ShopifyMappingPanel
+                session={activeSession}
+                isEnded={isEnded}
+                cityName={selectedCity?.name ?? null}
+                locationName={selectedLocation?.name ?? null}
+              />
             </div>
           )}
+
 
           {showWizard ? (
             <SetupWizard

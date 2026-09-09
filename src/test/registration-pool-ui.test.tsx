@@ -18,10 +18,22 @@ const poolState: { data: RegistrationPoolData | undefined; isLoading: boolean; i
   isLoading: false,
   isError: false,
 };
+const attentionState: { data: import("@/hooks/useRegistrationPool").TerminalRosterAttentionRow[] } = { data: [] };
 vi.mock("@/hooks/useRegistrationPool", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/hooks/useRegistrationPool")>();
-  return { ...actual, useRegistrationPool: () => poolState };
+  return {
+    ...actual,
+    useRegistrationPool: () => poolState,
+    useTerminalRosterAttention: () => attentionState,
+  };
 });
+
+const catalogState = { data: { products: [], live: false } as { products: unknown[]; live: boolean } };
+vi.mock("@/hooks/useEventCatalog", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/hooks/useEventCatalog")>();
+  return { ...actual, useEventCatalog: () => catalogState };
+});
+
 
 import RegistrationPool, { RegistrationPoolSummary } from "@/components/admin/RegistrationPool";
 
@@ -69,6 +81,8 @@ describe("RegistrationPool (admin Players card)", () => {
     poolState.data = undefined;
     poolState.isLoading = false;
     poolState.isError = false;
+    attentionState.data = [];
+
   });
 
   afterEach(() => {
@@ -184,6 +198,62 @@ describe("RegistrationPool (admin Players card)", () => {
     const addAsha = container.querySelector<HTMLButtonElement>('button[aria-label="Add Asha Mehta to roster"]');
     expect(addAsha?.disabled).toBe(true);
   });
+
+  it("has no bulk placement action — placement stays manual, one seat at a time", () => {
+    const waiting = [reg({}), reg({ id: "reg-b", seat_index: 2, profile: { first_name: "Neel", last_name: "R", email: "n@e.com" } })];
+    poolState.data = { registrations: waiting, assigned: new Map(), waiting };
+
+    mount(
+      <RegistrationPool sessionId="sess-1" target={{ kind: "court", courtId: 1 }} currentPlayerNames={[]} capacityRemaining={12} />,
+    );
+
+    const text = container.textContent ?? "";
+    expect(text).not.toContain("Add all");
+    expect(text).toContain("Customer-selected skill is advisory. Host decides final court/group placement.");
+    const buttons = [...container.querySelectorAll("button")].map((b) => b.getAttribute("aria-label"));
+    expect(buttons).toContain("Add Asha Mehta to roster");
+    expect(buttons).toContain("Add Neel R to roster");
+  });
+
+  it("shows what the customer selected at checkout from the line item title", () => {
+    const waiting = [reg({ line_item_title: "Bandra / Intermediate (<3.4)" })];
+    poolState.data = { registrations: waiting, assigned: new Map(), waiting };
+
+    mount(
+      <RegistrationPool sessionId="sess-1" target={{ kind: "court", courtId: 1 }} currentPlayerNames={[]} capacityRemaining={12} />,
+    );
+
+    const chip = container.querySelector('[data-testid="customer-selected"]');
+    expect(chip?.textContent).toContain("Bandra · Intermediate (<3.4)");
+  });
+
+  it("warns about cancelled/refunded seats still on a roster without mutating anything", () => {
+    const waiting = [reg({})];
+    poolState.data = { registrations: waiting, assigned: new Map(), waiting };
+    attentionState.data = [
+      {
+        registrationId: "reg-x",
+        status: "refunded",
+        seatIndex: 1,
+        playerId: "p-7",
+        playerName: "Neel R",
+        unitLabel: "Court 2",
+      },
+    ];
+
+    mount(
+      <RegistrationPool sessionId="sess-1" target={{ kind: "court", courtId: 1 }} currentPlayerNames={[]} capacityRemaining={12} />,
+    );
+
+    const banner = container.querySelector('[data-testid="terminal-roster-attention"]');
+    expect(banner?.textContent).toContain("1 refunded/cancelled participant is still on a roster.");
+    expect(banner?.textContent).toContain("Nothing was changed automatically — review placement manually.");
+    expect(banner?.textContent).toContain("Neel R");
+    expect(banner?.textContent).toContain("Refunded · Court 2");
+    // read-only: no assignment/removal is triggered by the warning
+    expect(assignMock).not.toHaveBeenCalled();
+  });
+
 
   it("summarises the session on the dashboard", () => {
     const rows = [reg({}), reg({ id: "reg-c", seat_index: 2, profile: { first_name: "Neel", last_name: null, email: null } })];

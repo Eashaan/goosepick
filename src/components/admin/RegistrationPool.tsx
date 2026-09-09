@@ -1,11 +1,18 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Check, ChevronDown, ChevronUp, Plus, Ticket, UserPlus } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronUp, Plus, Ticket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { REGISTRATION_POOL_QUERY_KEY, useRegistrationPool } from "@/hooks/useRegistrationPool";
+import {
+  REGISTRATION_POOL_QUERY_KEY,
+  useRegistrationPool,
+  useTerminalRosterAttention,
+  type TerminalRosterAttentionRow,
+} from "@/hooks/useRegistrationPool";
+import { useEventCatalog } from "@/hooks/useEventCatalog";
+import { CUSTOMER_SKILL_ADVISORY, customerSelectionChips } from "@/lib/customerSelection";
 import {
   assignRegistrationToRoster,
   isDuplicateNameError,
@@ -17,6 +24,7 @@ import {
   type RosterTarget,
 } from "@/lib/registrationAssignment";
 import type { RegistrationStatus } from "@/integrations/supabase/participantDb";
+
 
 const STATUS_LABEL: Partial<Record<RegistrationStatus, string>> = {
   paid: "Paid",
@@ -34,6 +42,42 @@ const seatLabel = (row: RegistrationPoolRow) => {
   const order = row.commerce_order?.shopify_order_name;
   return order ? `Seat ${row.seat_index} · ${order}` : `Seat ${row.seat_index}`;
 };
+
+/**
+ * Read-only banner: a cancelled/refunded seat still has a roster player.
+ * Nothing is ever changed automatically — no player removal, no rebalance, no
+ * court/group/rotation/session mutation. A human reviews the placement.
+ */
+export const TerminalRosterAttention = ({ rows }: { rows: readonly TerminalRosterAttentionRow[] }) => {
+  if (rows.length === 0) return null;
+  return (
+    <div
+      className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs"
+      data-testid="terminal-roster-attention"
+    >
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
+        <p className="font-semibold text-foreground">
+          {rows.length} refunded/cancelled participant{rows.length === 1 ? " is" : "s are"} still on a roster.
+        </p>
+      </div>
+      <p className="mt-1 text-muted-foreground">
+        Nothing was changed automatically — review placement manually.
+      </p>
+      <ul className="mt-2 space-y-1">
+        {rows.map((row) => (
+          <li key={row.registrationId} className="flex items-center justify-between gap-2">
+            <span className="truncate font-medium">{row.playerName}</span>
+            <span className="shrink-0 text-muted-foreground">
+              {row.status === "refunded" ? "Refunded" : "Cancelled"} · {row.unitLabel}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
 
 interface RegistrationPoolProps {
   sessionId: string | null | undefined;
@@ -62,8 +106,11 @@ const RegistrationPool = ({
 }: RegistrationPoolProps) => {
   const queryClient = useQueryClient();
   const { data, isLoading, isError } = useRegistrationPool(sessionId);
+  const { data: attention = [] } = useTerminalRosterAttention(sessionId);
+  const { data: catalog } = useEventCatalog(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [assignedOpen, setAssignedOpen] = useState(false);
+
 
   const lowerNames = useMemo(
     () => new Set(currentPlayerNames.map((n) => n.trim().toLowerCase())),
@@ -136,41 +183,6 @@ const RegistrationPool = ({
     assign.mutate({ registration, name });
   };
 
-  const handleAddAll = async () => {
-    if (!data || disabledReason) return;
-    const candidates = data.waiting
-      .filter((r) => drafts[r.id] === undefined)
-      .map((r) => ({ registration: r, name: resolveRosterName(r) }))
-      .filter((c): c is { registration: RegistrationPoolRow; name: string } => Boolean(c.name));
-
-    let added = 0;
-    let skipped = 0;
-    const seen = new Set(lowerNames);
-    for (const candidate of candidates) {
-      if (added >= capacityRemaining) {
-        skipped++;
-        continue;
-      }
-      const key = candidate.name.toLowerCase();
-      if (seen.has(key)) {
-        skipped++;
-        continue;
-      }
-      try {
-        const result = await assign.mutateAsync(candidate);
-        if (result.status === "assigned") {
-          added++;
-          seen.add(key);
-        }
-      } catch {
-        skipped++;
-      }
-    }
-    if (added > 0 || skipped > 0) {
-      toast.message(`Added ${added} player${added === 1 ? "" : "s"} from registrations` + (skipped ? ` · ${skipped} skipped` : ""));
-    }
-  };
-
   if (!sessionId) return null;
   if (isLoading) {
     return <p className="text-xs text-muted-foreground">Checking online registrations...</p>;
@@ -178,12 +190,10 @@ const RegistrationPool = ({
   if (isError || !data) {
     return <p className="text-xs text-muted-foreground">Online registrations are unavailable right now.</p>;
   }
-  if (data.registrations.length === 0) return null;
+  if (data.registrations.length === 0 && attention.length === 0) return null;
 
   const { waiting, assigned } = data;
   const assignedRows = data.registrations.filter((r) => assigned.has(r.id));
-  const namedWaiting = waiting.filter((r) => drafts[r.id] === undefined && resolveRosterName(r));
-  const canBulkAdd = !disabledReason && capacityRemaining > 0 && namedWaiting.length > 1;
 
   return (
     <div className="rounded-lg border border-border bg-background/60 p-3 space-y-3" data-testid="registration-pool">
@@ -195,14 +205,15 @@ const RegistrationPool = ({
             {waiting.length} waiting
           </span>
         </div>
-        {canBulkAdd && (
-          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleAddAll} disabled={assign.isPending}>
-            <UserPlus className="mr-1 h-3 w-3" /> Add all named
-          </Button>
-        )}
       </div>
 
+      <TerminalRosterAttention rows={attention} />
+
+      <p className="text-[11px] text-muted-foreground">{CUSTOMER_SKILL_ADVISORY}</p>
+
       {disabledReason && <p className="text-xs text-muted-foreground">{disabledReason}</p>}
+
+
 
       {waiting.length === 0 ? (
         <p className="text-xs text-muted-foreground">Every registration for this session is on a roster.</p>
@@ -228,7 +239,17 @@ const RegistrationPool = ({
                     <p className="truncate text-xs text-muted-foreground">
                       {[email, seatLabel(registration)].filter(Boolean).join(" · ")}
                     </p>
+                    {(() => {
+                      const chips = customerSelectionChips(registration, catalog?.products ?? []);
+                      if (chips.length === 0) return null;
+                      return (
+                        <p className="mt-1 text-[11px] text-muted-foreground" data-testid="customer-selected">
+                          Customer selected: <span className="font-medium text-foreground">{chips.join(" · ")}</span>
+                        </p>
+                      );
+                    })()}
                   </div>
+
                   {!editing && (
                     <Button
                       size="sm"
@@ -318,6 +339,7 @@ export default RegistrationPool;
 /** Compact session-wide registration status for the admin dashboard. */
 export const RegistrationPoolSummary = ({ sessionId }: { sessionId: string | null | undefined }) => {
   const { data, isLoading, isError } = useRegistrationPool(sessionId);
+  const { data: attention = [] } = useTerminalRosterAttention(sessionId);
   if (!sessionId || isLoading || isError || !data) return null;
 
   const total = data.registrations.length;
@@ -325,7 +347,8 @@ export const RegistrationPoolSummary = ({ sessionId }: { sessionId: string | nul
   const waiting = data.waiting;
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4" data-testid="registration-summary">
+    <div className="rounded-xl border border-border bg-card p-4 space-y-3" data-testid="registration-summary">
+
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Ticket className="h-4 w-4 text-primary" />
@@ -337,8 +360,10 @@ export const RegistrationPoolSummary = ({ sessionId }: { sessionId: string | nul
             : `${total} paid · ${onRosters} on rosters · ${waiting.length} waiting`}
         </p>
       </div>
+      <TerminalRosterAttention rows={attention} />
       {waiting.length > 0 && (
         <>
+
           <div className="mt-3 flex flex-wrap gap-1.5">
             {waiting.map((r) => {
               const name = resolveRosterName(r);
