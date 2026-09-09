@@ -12,7 +12,12 @@ import {
   type TerminalRosterAttentionRow,
 } from "@/hooks/useRegistrationPool";
 import { useEventCatalog } from "@/hooks/useEventCatalog";
-import { CUSTOMER_SKILL_ADVISORY, customerSelectionChips } from "@/lib/customerSelection";
+import {
+  CUSTOMER_SKILL_ADVISORY,
+  MULTI_SEAT_SKILL_NOTE,
+  customerSelectedSkill,
+  customerSelectionChips,
+} from "@/lib/customerSelection";
 import {
   assignRegistrationToRoster,
   isDuplicateNameError,
