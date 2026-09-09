@@ -223,9 +223,36 @@ describe("RegistrationPool (admin Players card)", () => {
       <RegistrationPool sessionId="sess-1" target={{ kind: "court", courtId: 1 }} currentPlayerNames={[]} capacityRemaining={12} />,
     );
 
-    const chip = container.querySelector('[data-testid="customer-selected"]');
-    expect(chip?.textContent).toContain("Bandra · Intermediate (<3.4)");
+    expect(container.querySelector('[data-testid="customer-selected"]')?.textContent).toContain("Bandra");
+    expect(container.querySelector('[data-testid="customer-selected-skill"]')?.textContent).toContain(
+      "Customer selected skill: Intermediate (<3.4)",
+    );
   });
+
+  it("shows the stored skill choice and a multi-ticket note for a City + Locality order", () => {
+    const waiting = [
+      reg({
+        line_item_title: "Goosepick Thursdays — Mumbai / Bandra",
+        selected_skill_level: "Beginner+ (<3.0)",
+        line_item_quantity: 3,
+      }),
+    ];
+    poolState.data = { registrations: waiting, assigned: new Map(), waiting };
+
+    mount(
+      <RegistrationPool sessionId="sess-1" target={{ kind: "court", courtId: 1 }} currentPlayerNames={[]} capacityRemaining={12} />,
+    );
+
+    expect(container.querySelector('[data-testid="customer-selected-skill"]')?.textContent).toContain(
+      "Customer selected skill: Beginner+ (<3.0)",
+    );
+    expect(container.querySelector('[data-testid="multi-seat-skill-note"]')?.textContent).toContain(
+      "Multi-ticket orders share one skill choice",
+    );
+    // Advisory only: no court/group is chosen from the skill.
+    expect(container.textContent).toContain("Customer-selected skill is advisory.");
+  });
+
 
   it("warns about cancelled/refunded seats still on a roster without mutating anything", () => {
     const waiting = [reg({})];
