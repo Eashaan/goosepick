@@ -104,7 +104,7 @@ export function buildPublicOccurrences(
     entry.date = date;
     const capacity = row.session.capacity ?? null;
     entry.capacity = typeof capacity === "number" && capacity > 0 ? capacity : entry.capacity;
-    entry.sold = Math.max(entry.sold, booked[row.session_id] ?? 0);
+    entry.sold = Math.max(entry.sold, (row.session_id ? booked[row.session_id] : 0) ?? 0);
     entry.label = entry.label ?? labelFromMetadata(row.metadata);
     if (isProductLevel) entry.all = true;
     else entry.variants.add(variantId);
