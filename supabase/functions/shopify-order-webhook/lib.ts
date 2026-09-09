@@ -677,6 +677,9 @@ export function planSeatRows(input: SeatPlanInput): RegistrationInsert[] {
         line_item_quantity: item.quantity,
         requested_session_key: item.requestedKey,
         unmapped_reason: mapped ? null : resolution.reason,
+        // Same advisory value on every seat of the line item, by design.
+        selected_skill_level: item.selectedSkillLevel,
+
       });
     }
   }
