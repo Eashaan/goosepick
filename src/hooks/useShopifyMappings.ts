@@ -161,11 +161,13 @@ export async function createSessionMappings(input: CreateMappingsInput): Promise
       session_id: input.session.id,
       is_active: true,
       metadata: {
-        product_title: product?.title ?? null,
-        variant_title: variant?.title ?? null,
-        label: describeVariant(productId, variantId),
+        // Live Shopify titles at link time when available, static otherwise.
+        product_title: selection.productTitle ?? product?.title ?? null,
+        variant_title: selection.variantTitle ?? variant?.title ?? null,
+        label: selection.label ?? describeVariant(productId, variantId),
         created_via: "admin_dashboard",
       },
+
     };
 
     const { error } = await supabase.from("shopify_session_mappings").insert(row);
