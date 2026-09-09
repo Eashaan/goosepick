@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import AdminLogin from "./pages/admin/AdminLogin";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminSchedule from "./pages/admin/AdminSchedule";
 import AdminCourt from "./pages/admin/AdminCourt";
 import AdminGroup from "./pages/admin/AdminGroup";
 import PublicCourtSelector from "./pages/public/PublicCourtSelector";
@@ -35,6 +36,7 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/admin/login" element={<AdminLogin />} />
               <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/schedule" element={<AdminSchedule />} />
               <Route path="/admin/court/:courtId" element={<AdminCourt />} />
               <Route path="/admin/group/:groupId" element={<AdminGroup />} />
               <Route path="/public" element={<PublicCourtSelector />} />
