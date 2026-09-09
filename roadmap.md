@@ -38,3 +38,24 @@
 - Admin-only draft-only RPC `admin_set_shopify_session_date` (applied live).
 - Event date control in ShopifyMappingPanel; mappings inherit `session.date`.
 - Remaining: Shopify theme/product-page date picker (separate turn).
+
+## Schedule management (Thursdays automatic + Social manual) — done in app
+- Applied migration: `recurring_experience_schedules`, `recurring_experience_exceptions`,
+  `sessions.capacity`, `sessions.recurring_schedule_id`, helpers (`session_booked_seats`,
+  `session_has_operational_data`) and admin RPCs (reconcile, pause/resume, skip/unskip,
+  capacity, create Social). Internal reconciler is service-role only.
+- Daily pg_cron job `reconcile-recurring-experience-schedules` at 20:00 UTC keeps a rolling
+  8-week window of DRAFT Thursdays sessions + exact Shopify variant mappings per locality.
+  Existing 17 Sep Bandra/Andheri sessions and occurrence keys were adopted, not replaced.
+- Seeded schedules: Bandra `f0cb217e-a257-41d8-94dd-0ae9f5527401`,
+  Andheri `cb3a9c35-6b3e-47ce-973b-9aa0a8ca02cc`.
+- Admin UI `/admin/schedule` (linked from the dashboard): schedules with pause/resume and
+  skipped dates, upcoming dates grouped by day with on-sale + capacity state, Open (pins the
+  exact session for the event-day flow), Skip/Undo skip, capacity editing, manual Social
+  creation per city/date with ticket-type selection.
+- `useActiveSession` now resolves the nearest UPCOMING draft (pinned session still wins), and
+  Start Session asks for confirmation when the session date is in the future.
+- Public occurrence feed exposes `capacity`, `remaining`, `sold_out` (counts only, no PII).
+- Paid webhook seats are never rejected: an over-capacity date is flagged `needs_review` with
+  `capacity_overruns` in the event result.
+- Remaining: Shopify theme should hide/block occurrences where `sold_out` is true (theme turn).
