@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  CalendarDays,
   Copy,
   Link2,
   Loader2,
@@ -39,6 +40,9 @@ import {
 } from "@/lib/shopifyCatalog";
 
 export const SHOPIFY_PANEL_ANCHOR = "shopify-tickets";
+
+/** Local ISO date (YYYY-MM-DD) used as the earliest selectable event date. */
+const todayIso = () => new Date().toISOString().slice(0, 10);
 
 const selectionKey = (productId: string, variantId: string | null) =>
   `${productId}:${variantId ?? "all"}`;
