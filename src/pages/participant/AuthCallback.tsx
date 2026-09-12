@@ -4,6 +4,8 @@ import PageLayout from "@/components/layout/PageLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useParticipantAuth } from "@/hooks/useParticipantAuth";
 import { Button } from "@/components/ui/button";
+import { sanitizeNextPath } from "@/lib/authVerify";
+
 
 /**
  * Completes a passwordless sign-in. Handles both the PKCE `?code=` flow and the
@@ -55,7 +57,9 @@ const AuthCallback = () => {
   useEffect(() => {
     if (exchanging || isLoading) return;
     if (user) {
-      navigate("/my", { replace: true });
+      const next = sanitizeNextPath(new URLSearchParams(window.location.search).get("next"));
+      navigate(next, { replace: true });
+
     } else if (!failed) {
       setFailed("That sign-in link is no longer valid. Please request a new one.");
     }
