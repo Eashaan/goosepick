@@ -17,6 +17,8 @@ import PublicCourt from "./pages/public/PublicCourt";
 import PublicGroup from "./pages/public/PublicGroup";
 import ParticipantLogin from "./pages/participant/ParticipantLogin";
 import AuthCallback from "./pages/participant/AuthCallback";
+import AuthVerify from "./pages/participant/AuthVerify";
+
 import MyGoosepick from "./pages/participant/MyGoosepick";
 import MyProfile from "./pages/participant/MyProfile";
 import MyExperience from "./pages/participant/MyExperience";
@@ -45,6 +47,8 @@ const App = () => (
               {/* Participant accounts (additive; legacy /public flow untouched) */}
               <Route path="/auth" element={<ParticipantLogin />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
+              <Route path="/auth/verify" element={<AuthVerify />} />
+
               <Route
                 path="/my"
                 element={
