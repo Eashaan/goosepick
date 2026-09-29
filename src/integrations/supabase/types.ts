@@ -1604,6 +1604,7 @@ export type Database = {
         Returns: Json
       }
       current_participant_profile_id: { Args: never; Returns: string }
+      current_staff_role: { Args: never; Returns: string }
       end_group_match_atomic: {
         Args: {
           p_court_number: number
@@ -1627,6 +1628,7 @@ export type Database = {
         Returns: Json
       }
       gp_random_token: { Args: { p_len?: number }; Returns: string }
+      has_permission: { Args: { p_permission: string }; Returns: boolean }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1635,6 +1637,9 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      is_event_operator: { Args: never; Returns: boolean }
+      is_owner: { Args: never; Returns: boolean }
+      is_staff: { Args: never; Returns: boolean }
       participant_update_guest_seat: {
         Args: {
           p_email?: string
@@ -1654,6 +1659,10 @@ export type Database = {
         Returns: boolean
       }
       shopify_numeric_id: { Args: { p_id: string }; Returns: string }
+      staff_role: {
+        Args: { _user_id: string }
+        Returns: Database["public"]["Enums"]["app_role"]
+      }
       start_group_match_atomic: {
         Args: {
           p_court_number: number
