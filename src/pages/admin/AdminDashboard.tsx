@@ -15,6 +15,7 @@ import SessionLifecycleControls from "@/components/admin/SessionLifecycleControl
 import { RegistrationPoolSummary } from "@/components/admin/RegistrationPool";
 import SeatManager from "@/components/admin/SeatManager";
 import ShopifyMappingPanel from "@/components/admin/ShopifyMappingPanel";
+import AdminHome from "@/components/admin/AdminHome";
 
 import CourtStatusCard, { type CourtStatus } from "@/components/admin/CourtStatusCard";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
@@ -24,7 +25,7 @@ import { useActiveSession } from "@/hooks/useActiveSession";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const { isAdmin, isLoading, signOut, user } = useAdminAuth();
+  const { isAdmin, isLoading, signOut, user, role, can } = useAdminAuth();
   const {
     selectedCityId,
     selectedEventId,
@@ -54,12 +55,10 @@ const AdminDashboard = () => {
   const [creatingGroupId, setCreatingGroupId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isLoading && !isAdmin) navigate("/admin/login");
+    if (!isLoading && !isAdmin) navigate("/admin/login", { replace: true });
   }, [isLoading, isAdmin, navigate]);
 
-  useEffect(() => {
-    if (!isLoading && isAdmin && !isContextValid) navigate("/", { replace: true });
-  }, [isLoading, isAdmin, isContextValid, navigate]);
+  // Missing context no longer redirects to "/" (participant portal) — Admin Home renders below.
 
   // Log warnings for admins
   useEffect(() => {
@@ -69,12 +68,12 @@ const AdminDashboard = () => {
   const handleLogout = async () => {
     await signOut();
     clearSelection();
-    navigate("/");
+    navigate("/admin/login", { replace: true });
   };
 
+  // Back = return to Admin Home (context picker), staying inside /admin.
   const handleBackToHome = () => {
     clearSelection();
-    navigate("/");
   };
 
   // ── Linked court IDs for status queries ──
@@ -170,6 +169,17 @@ const AdminDashboard = () => {
     enabled: !!sessionConfig?.id,
   });
 
+  if (!isLoading && isAdmin && role && !isContextValid) {
+    return (
+      <AdminHome
+        email={user?.email}
+        role={role}
+        canSchedule={can("schedule.manage")}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
   if (isLoading || configLoading) {
     return (
       <PageLayout>
@@ -181,6 +191,7 @@ const AdminDashboard = () => {
   }
 
   if (!isAdmin || !isContextValid) return null;
+  const canOperate = can("event.operate");
 
   // ── Status helpers ──
   const getItemStatus = (item: RenderItem): CourtStatus => {
@@ -345,26 +356,31 @@ const AdminDashboard = () => {
                 <p className="text-xs text-muted-foreground">Signed in as {user.email}</p>
               )}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 text-xs"
-              onClick={() => navigate("/admin/schedule")}
-            >
-              <CalendarDays className="h-3.5 w-3.5" />
-              Schedule
-            </Button>
-            {user && <AdminManagement currentUserId={user.id} />}
+            {can("schedule.manage") && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 text-xs"
+                onClick={() => navigate("/admin/schedule")}
+              >
+                <CalendarDays className="h-3.5 w-3.5" />
+                Schedule
+              </Button>
+            )}
+            {user && can("roles.manage") && <AdminManagement currentUserId={user.id} />}
 
-            {setupCompleted && !showEditSetup && !isEnded && (
+            {canOperate && setupCompleted && !showEditSetup && !isEnded && (
               <Button variant="ghost" size="icon" onClick={() => setShowEditSetup(true)}>
                 <Settings className="h-5 w-5" />
               </Button>
             )}
           </div>
+          {!canOperate && (
+            <p className="mb-4 text-xs text-muted-foreground">Read-only access — changes are disabled for your role.</p>
+          )}
 
           {/* Session Lifecycle Controls */}
-          {setupCompleted && !showWizard && (
+          {canOperate && setupCompleted && !showWizard && (
             <div className="mb-4">
               <SessionLifecycleControls setupCompleted={setupCompleted} />
             </div>
@@ -379,21 +395,25 @@ const AdminDashboard = () => {
                 activeCount={activeCount}
                 liveCount={liveCount}
               />
-              {/* Online registrations for this session (paid seats → rosters) */}
-              <SeatManager sessionId={currentSessionId} isEnded={isEnded} />
-              <RegistrationPoolSummary sessionId={currentSessionId} />
-              {/* Session ↔ Shopify ticket links (live variant list, session is authoritative) */}
-              <ShopifyMappingPanel
-                session={activeSession}
-                isEnded={isEnded}
-                cityName={selectedCity?.name ?? null}
-                locationName={selectedLocation?.name ?? null}
-              />
+              {/* Seats for this session (owner/admin/host) */}
+              {can("seats.manage") && <SeatManager sessionId={currentSessionId} isEnded={isEnded} />}
+              {canOperate && <RegistrationPoolSummary sessionId={currentSessionId} />}
+              {/* Session ↔ Shopify ticket links — owner/admin only */}
+              {can("shopify.manage") && (
+                <ShopifyMappingPanel
+                  session={activeSession}
+                  isEnded={isEnded}
+                  cityName={selectedCity?.name ?? null}
+                  locationName={selectedLocation?.name ?? null}
+                />
+              )}
             </div>
           )}
 
 
-          {showWizard ? (
+          {showWizard && !canOperate ? (
+            <div className="py-12 text-center text-muted-foreground">This session hasn't been set up yet.</div>
+          ) : showWizard ? (
             <SetupWizard
               cityId={selectedCityId}
               eventId={selectedEventId!}
@@ -418,7 +438,7 @@ const AdminDashboard = () => {
                       <CourtStatusCard
                         key={item.key}
                         label={item.label}
-                        onClick={() => handleGroupClick(item)}
+                        onClick={canOperate ? () => handleGroupClick(item) : undefined}
                         isLoading={creatingGroupId === item.unitId}
                         status={status}
                       />
@@ -429,8 +449,8 @@ const AdminDashboard = () => {
                   <CourtStatusCard
                     key={item.key}
                     label={item.label}
-                    to={item.courtId ? `/admin/court/${item.courtId}` : undefined}
-                    onClick={!item.courtId ? () => handleCourtClick(item) : undefined}
+                    to={canOperate && item.courtId ? `/admin/court/${item.courtId}` : undefined}
+                    onClick={canOperate && !item.courtId ? () => handleCourtClick(item) : undefined}
                     isLoading={creatingCourtNum === item.courtNumber}
                     status={status}
                     fairnessScore={score}

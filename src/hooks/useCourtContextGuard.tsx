@@ -9,7 +9,7 @@ import { useActiveSession } from "./useActiveSession";
  * Validates that a court belongs to the current event/location context.
  * Redirects to home if context is invalid or court doesn't belong.
  */
-export const useCourtContextGuard = (courtId: number) => {
+export const useCourtContextGuard = (courtId: number, fallbackPath: string = "/") => {
   const navigate = useNavigate();
   const {
     selectedEventId,
@@ -41,42 +41,42 @@ export const useCourtContextGuard = (courtId: number) => {
 
     // No context selected → go home
     if (!isContextValid) {
-      navigate("/", { replace: true });
+      navigate(fallbackPath, { replace: true });
       return;
     }
 
     // Court doesn't exist
     if (!court) {
-      navigate("/", { replace: true });
+      navigate(fallbackPath, { replace: true });
       return;
     }
 
     // Court must belong to the active session, not just the same event/location.
     if (activeSessionId && court.session_id !== activeSessionId) {
-      navigate("/", { replace: true });
+      navigate(fallbackPath, { replace: true });
       return;
     }
 
     // Court doesn't belong to selected event
     if (court.event_id !== selectedEventId) {
-      navigate("/", { replace: true });
+      navigate(fallbackPath, { replace: true });
       return;
     }
 
     // For recurring events, court must belong to selected location
     if (requiresLocation && court.location_id !== selectedLocationId) {
-      navigate("/", { replace: true });
+      navigate(fallbackPath, { replace: true });
       return;
     }
 
     // For non-recurring events, court's location should be null
     if (!requiresLocation && court.location_id !== null) {
-      navigate("/", { replace: true });
+      navigate(fallbackPath, { replace: true });
       return;
     }
 
     setValidated(true);
-  }, [contextLoading, courtLoading, sessionLoading, activeSessionId, court, selectedEventId, selectedLocationId, requiresLocation, isContextValid, navigate]);
+  }, [contextLoading, courtLoading, sessionLoading, activeSessionId, court, selectedEventId, selectedLocationId, requiresLocation, isContextValid, navigate, fallbackPath]);
 
   return { isValidating: contextLoading || courtLoading || sessionLoading || !validated };
 };

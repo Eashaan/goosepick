@@ -6,171 +6,116 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const STAFF_ROLES = ["owner", "admin", "host", "viewer"] as const;
+type StaffRole = (typeof STAFF_ROLES)[number];
+const RANK: Record<string, number> = { owner: 1, admin: 2, host: 3, viewer: 4 };
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+/** Owner-only staff role management. One role per user; last owner is protected (also enforced by DB trigger). */
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // Verify caller is admin
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
     const token = authHeader.replace("Bearer ", "");
     const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (claimsError || !claimsData?.claims) return json({ error: "Unauthorized" }, 401);
     const callerId = claimsData.claims.sub as string;
 
-    // Use service role for privileged operations
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // Check caller is admin
-    const { data: callerRole } = await adminClient
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", callerId)
-      .eq("role", "admin")
-      .maybeSingle();
+    const { data: callerOwner } = await adminClient
+      .from("user_roles").select("id").eq("user_id", callerId).eq("role", "owner").maybeSingle();
+    if (!callerOwner) return json({ error: "Forbidden: only owners can manage roles" }, 403);
 
-    if (!callerRole) {
-      return new Response(JSON.stringify({ error: "Forbidden: not an admin" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const { action, email, user_id, role } = await req.json();
 
-    const { action, email, user_id } = await req.json();
+    const countOwners = async () => {
+      const { count } = await adminClient.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "owner");
+      return count ?? 0;
+    };
+    const rolesOf = async (uid: string) => {
+      const { data } = await adminClient.from("user_roles").select("role").eq("user_id", uid);
+      return (data ?? []).map((r) => r.role as string);
+    };
 
-    // ── LIST ──
     if (action === "list") {
-      const { data: roles, error } = await adminClient
-        .from("user_roles")
-        .select("user_id, role")
-        .eq("role", "admin");
-
+      const { data: rows, error } = await adminClient.from("user_roles").select("user_id, role");
       if (error) throw error;
-
-      // Lookup emails from auth.users
-      const admins = [];
-      for (const r of roles || []) {
-        const { data: userData } = await adminClient.auth.admin.getUserById(r.user_id);
-        admins.push({
-          user_id: r.user_id,
-          email: userData?.user?.email || "unknown",
-        });
+      const best = new Map<string, string>();
+      for (const r of rows ?? []) {
+        const cur = best.get(r.user_id);
+        if (!cur || (RANK[r.role] ?? 9) < (RANK[cur] ?? 9)) best.set(r.user_id, r.role);
       }
-
-      return new Response(JSON.stringify({ admins }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      const staff = [];
+      for (const [uid, r] of best) {
+        const { data: u } = await adminClient.auth.admin.getUserById(uid);
+        staff.push({ user_id: uid, email: u?.user?.email || "unknown", role: r });
+      }
+      staff.sort((a, b) => (RANK[a.role] - RANK[b.role]) || a.email.localeCompare(b.email));
+      // `admins` kept for backwards compatibility with older clients
+      return json({ staff, admins: staff });
     }
 
-    // ── ADD ──
-    if (action === "add") {
-      if (!email || typeof email !== "string") {
-        return new Response(JSON.stringify({ error: "Email is required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+    if (action === "set_role" || action === "add") {
+      const newRole = (action === "add" ? role || "admin" : role) as StaffRole;
+      if (!STAFF_ROLES.includes(newRole)) return json({ error: "Invalid role" }, 400);
+
+      let targetId = typeof user_id === "string" ? user_id : null;
+      if (!targetId) {
+        if (!email || typeof email !== "string") return json({ error: "Email is required" }, 400);
+        const trimmed = email.trim().toLowerCase();
+        let found: { id: string } | undefined;
+        for (let page = 1; page <= 20 && !found; page++) {
+          const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage: 1000 });
+          if (error) throw error;
+          found = (data?.users || []).find((u) => u.email?.toLowerCase() === trimmed);
+          if (!data?.users?.length || data.users.length < 1000) break;
+        }
+        if (!found) return json({ error: "No account found with that email. The person must sign in once first." }, 404);
+        targetId = found.id;
       }
 
-      const trimmed = email.trim().toLowerCase();
-
-      // Find user by email
-      const { data: userList, error: listErr } = await adminClient.auth.admin.listUsers();
-      if (listErr) throw listErr;
-
-      const targetUser = (userList?.users || []).find(
-        (u) => u.email?.toLowerCase() === trimmed
-      );
-
-      if (!targetUser) {
-        return new Response(
-          JSON.stringify({ error: "No account found with that email. The user must sign up first." }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      const current = await rolesOf(targetId);
+      if (current.includes("owner") && newRole !== "owner" && (await countOwners()) <= 1) {
+        return json({ error: "You can't demote the last owner. Make someone else owner first." }, 400);
       }
 
-      // Check if already admin
-      const { data: existing } = await adminClient
-        .from("user_roles")
-        .select("id")
-        .eq("user_id", targetUser.id)
-        .eq("role", "admin")
-        .maybeSingle();
-
-      if (existing) {
-        return new Response(JSON.stringify({ error: "User is already an admin" }), {
-          status: 409,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      if (!current.includes(newRole)) {
+        const { error } = await adminClient.from("user_roles").insert({ user_id: targetId, role: newRole });
+        if (error) throw error;
       }
-
-      const { error: insertErr } = await adminClient
-        .from("user_roles")
-        .insert({ user_id: targetUser.id, role: "admin" });
-
-      if (insertErr) throw insertErr;
-
-      return new Response(JSON.stringify({ ok: true, user_id: targetUser.id, email: trimmed }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      const others = current.filter((r) => r !== newRole);
+      if (others.length) {
+        const { error } = await adminClient.from("user_roles").delete().eq("user_id", targetId).in("role", others);
+        if (error) throw error;
+      }
+      return json({ ok: true, user_id: targetId, role: newRole });
     }
 
-    // ── REMOVE ──
     if (action === "remove") {
-      if (!user_id || typeof user_id !== "string") {
-        return new Response(JSON.stringify({ error: "user_id is required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      if (!user_id || typeof user_id !== "string") return json({ error: "user_id is required" }, 400);
+      if (user_id === callerId) return json({ error: "You cannot remove your own access" }, 400);
+      const current = await rolesOf(user_id);
+      if (current.includes("owner") && (await countOwners()) <= 1) {
+        return json({ error: "You can't remove the last owner" }, 400);
       }
-
-      if (user_id === callerId) {
-        return new Response(JSON.stringify({ error: "You cannot remove yourself as admin" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const { error: delErr } = await adminClient
-        .from("user_roles")
-        .delete()
-        .eq("user_id", user_id)
-        .eq("role", "admin");
-
-      if (delErr) throw delErr;
-
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      const { error } = await adminClient.from("user_roles").delete().eq("user_id", user_id);
+      if (error) throw error;
+      return json({ ok: true });
     }
 
-    return new Response(JSON.stringify({ error: "Invalid action" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ error: "Invalid action" }, 400);
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message || "Internal error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ error: (err as Error).message || "Internal error" }, 500);
   }
 });

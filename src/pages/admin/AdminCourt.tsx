@@ -104,8 +104,8 @@ const AdminCourt = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const courtNumber = parseInt(courtId || "1");
-  const { isAdmin, isLoading: authLoading } = useAdminAuth();
-  const { isValidating } = useCourtContextGuard(courtNumber);
+  const { isAdmin, can, isLoading: authLoading } = useAdminAuth();
+  const { isValidating } = useCourtContextGuard(courtNumber, "/admin");
   const { selectedCityId, selectedLocationId, scopeEventType } = useEventContext();
   const { activeSession, sessionId: activeSessionId, isEnded: sessionEnded } = useActiveSession();
 
@@ -131,8 +131,11 @@ const AdminCourt = () => {
   useEffect(() => {
     if (!authLoading && !isAdmin) {
       navigate("/admin/login");
+    } else if (!authLoading && !can("event.operate")) {
+      // Viewers stay on the read-only dashboard
+      navigate("/admin", { replace: true });
     }
-  }, [authLoading, isAdmin, navigate]);
+  }, [authLoading, isAdmin, can, navigate]);
 
   // Fetch court details (for format_type)
   const { data: courtDetails } = useQuery({
