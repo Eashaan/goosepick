@@ -124,10 +124,11 @@ export function ParticipantAuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       isProfileComplete: isComplete(profile),
       sendMagicLink,
+      verifyEmailCode,
       refreshProfile,
       signOut,
     }),
-    [user, session, profile, isLoading, sendMagicLink, refreshProfile, signOut],
+    [user, session, profile, isLoading, sendMagicLink, verifyEmailCode, refreshProfile, signOut],
   );
 
   return (
