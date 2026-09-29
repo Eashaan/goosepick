@@ -15,6 +15,7 @@ import SessionLifecycleControls from "@/components/admin/SessionLifecycleControl
 import { RegistrationPoolSummary } from "@/components/admin/RegistrationPool";
 import SeatManager from "@/components/admin/SeatManager";
 import ShopifyMappingPanel from "@/components/admin/ShopifyMappingPanel";
+import AdminHome from "@/components/admin/AdminHome";
 
 import CourtStatusCard, { type CourtStatus } from "@/components/admin/CourtStatusCard";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
@@ -24,7 +25,7 @@ import { useActiveSession } from "@/hooks/useActiveSession";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const { isAdmin, isLoading, signOut, user } = useAdminAuth();
+  const { isAdmin, isLoading, signOut, user, role, can } = useAdminAuth();
   const {
     selectedCityId,
     selectedEventId,
@@ -54,12 +55,10 @@ const AdminDashboard = () => {
   const [creatingGroupId, setCreatingGroupId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isLoading && !isAdmin) navigate("/admin/login");
+    if (!isLoading && !isAdmin) navigate("/admin/login", { replace: true });
   }, [isLoading, isAdmin, navigate]);
 
-  useEffect(() => {
-    if (!isLoading && isAdmin && !isContextValid) navigate("/", { replace: true });
-  }, [isLoading, isAdmin, isContextValid, navigate]);
+  // Missing context no longer redirects to "/" (participant portal) — Admin Home renders below.
 
   // Log warnings for admins
   useEffect(() => {
@@ -69,12 +68,12 @@ const AdminDashboard = () => {
   const handleLogout = async () => {
     await signOut();
     clearSelection();
-    navigate("/");
+    navigate("/admin/login", { replace: true });
   };
 
+  // Back = return to Admin Home (context picker), staying inside /admin.
   const handleBackToHome = () => {
     clearSelection();
-    navigate("/");
   };
 
   // ── Linked court IDs for status queries ──
@@ -170,6 +169,17 @@ const AdminDashboard = () => {
     enabled: !!sessionConfig?.id,
   });
 
+  if (!isLoading && isAdmin && role && !isContextValid) {
+    return (
+      <AdminHome
+        email={user?.email}
+        role={role}
+        canSchedule={can("schedule.manage")}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
   if (isLoading || configLoading) {
     return (
       <PageLayout>
@@ -181,6 +191,7 @@ const AdminDashboard = () => {
   }
 
   if (!isAdmin || !isContextValid) return null;
+  const canOperate = can("event.operate");
 
   // ── Status helpers ──
   const getItemStatus = (item: RenderItem): CourtStatus => {
