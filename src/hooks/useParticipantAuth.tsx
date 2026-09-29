@@ -19,6 +19,7 @@ interface ParticipantAuthValue {
   /** True only when a signed-in user has a profile with the minimum details. */
   isProfileComplete: boolean;
   sendMagicLink: (email: string) => Promise<{ error: string | null }>;
+  verifyEmailCode: (email: string, token: string) => Promise<{ error: string | null }>;
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
 }

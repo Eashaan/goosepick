@@ -48,6 +48,10 @@ export interface RegistrationPoolRow {
   line_item_quantity?: number | null;
   /** Advisory skill the customer chose at checkout (display only). */
   selected_skill_level?: string | null;
+  seat_source?: string | null;
+  admin_note?: string | null;
+  created_by_admin?: boolean | null;
+  participant_phone?: string | null;
 
 
   profile: RegistrationPoolProfile | null;
