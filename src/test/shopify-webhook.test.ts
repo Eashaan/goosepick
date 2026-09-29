@@ -732,7 +732,7 @@ describe("unsupported topics + source guards", () => {
 
   it("webhook function is deployed without gateway JWT verification", () => {
     const toml = read("supabase/config.toml");
-    expect(toml).toMatch(/\[functions\.shopify-order-webhook\]\s*\nverify_jwt = false/);
+    expect(toml).toMatch(/\[functions\.shopify-order-webhook\]\s*verify_jwt = false/);
   });
 
   it("Phase 3 SQL is additive, service-role-only for the ledger and revokes function EXECUTE", () => {
