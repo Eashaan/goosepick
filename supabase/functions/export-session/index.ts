@@ -103,7 +103,8 @@ serve(async (req) => {
       .from("user_roles")
       .select("role")
       .eq("user_id", userId)
-      .eq("role", "admin")
+      .in("role", ["owner", "admin", "host", "viewer"])
+      .limit(1)
       .maybeSingle();
     if (!roleData) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {

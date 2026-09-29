@@ -136,7 +136,8 @@ serve(async (req) => {
       .from("user_roles")
       .select("role")
       .eq("user_id", claims.claims.sub)
-      .eq("role", "admin")
+      .in("role", ["owner", "admin", "host"])
+      .limit(1)
       .maybeSingle();
     if (roleError || !roleData) {
       return new Response(JSON.stringify({ ok: false, error: "Insufficient permissions" }), {

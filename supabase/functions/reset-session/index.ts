@@ -45,7 +45,8 @@ serve(async (req) => {
       .from("user_roles")
       .select("role")
       .eq("user_id", userId)
-      .eq("role", "admin")
+      .in("role", ["owner", "admin"])
+      .limit(1)
       .maybeSingle();
     assertNoError("Admin lookup failed", roleError);
     if (!roleData) {
