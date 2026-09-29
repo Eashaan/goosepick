@@ -28,11 +28,11 @@ export const MagicLinkEmail = ({
     <Head>
       <style>{darkModeCss}</style>
     </Head>
-    <Preview>Your Goosepick access link</Preview>
+    <Preview>Your Goosepick sign-in code</Preview>
     <Body style={main}>
       <Container style={container}>
         <Text style={brand}>GOOSEPICK</Text>
-        <Heading style={h1}>Your access link</Heading>
+        <Heading style={h1}>Sign in to Goosepick</Heading>
         <Text style={text}>
           Use the secure one-time link below to open your booking, roster and
           session access on {siteName}. It expires shortly and can only be
