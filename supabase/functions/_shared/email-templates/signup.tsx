@@ -19,6 +19,7 @@ interface SignupEmailProps {
   siteUrl: string
   recipient: string
   confirmationUrl: string
+  token?: string
 }
 
 export const SignupEmail = ({
@@ -26,6 +27,7 @@ export const SignupEmail = ({
   siteUrl,
   recipient,
   confirmationUrl,
+  token,
 }: SignupEmailProps) => (
   <Html lang="en" dir="ltr">
     <Head>
@@ -35,6 +37,11 @@ export const SignupEmail = ({
     <Body style={main}>
       <Container style={container}>
         <Heading style={h1}>Confirm your email</Heading>
+        {token ? (
+          <Text style={{ ...text, fontFamily: 'Courier, monospace', fontSize: '28px', fontWeight: 'bold', letterSpacing: '6px', color: '#000000' }}>
+            {token}
+          </Text>
+        ) : null}
         <Text style={text}>
           Thanks for signing up for{' '}
           <Link href={siteUrl} style={link}>

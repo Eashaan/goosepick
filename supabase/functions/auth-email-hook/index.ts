@@ -129,13 +129,14 @@ const handler = createAuthEmailHandler({
   sendUrl: Deno.env.get('LOVABLE_SEND_URL'),
   emails: {
     signup: {
-      subject: 'Confirm your email',
+      subject: 'Your Goosepick sign-in code',
       render: (data) =>
         React.createElement(SignupEmail, {
           siteName: SITE_NAME,
           siteUrl: SITE_URL,
           recipient: data.email,
           confirmationUrl: data.url,
+          token: data.token ?? undefined,
         }),
     },
     invite: {
@@ -148,11 +149,12 @@ const handler = createAuthEmailHandler({
         }),
     },
     magiclink: {
-      subject: 'Your Goosepick access link',
+      subject: 'Your Goosepick sign-in code',
       render: (data) =>
         React.createElement(MagicLinkEmail, {
           siteName: SITE_NAME,
           confirmationUrl: data.url,
+          token: data.token ?? undefined,
         }),
     },
     recovery: {
