@@ -402,7 +402,16 @@ export function useScheduleMutations() {
     onError: (err: Error) => toast.error(err.message),
   });
 
-  return { reconcile, setScheduleActive, skipDate, unskipDate, setCapacity, createSocial };
+  return {
+    reconcile,
+    setScheduleActive,
+    skipDate,
+    unskipDate,
+    setCapacity,
+    setDefaultCapacity,
+    applyDefaultCapacity,
+    createSocial,
+  };
 }
 
 /** Pin a session so every admin screen works against exactly this date. */
