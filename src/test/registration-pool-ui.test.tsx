@@ -122,7 +122,7 @@ describe("RegistrationPool (admin Players card)", () => {
     expect(text).toContain("Asha Mehta");
     expect(text).toContain("asha@example.com · Seat 1 · #1042");
     expect(text).toContain("Paid");
-    expect(text).toContain("Name needed");
+    expect(text).toContain("Purchaser's Guest 1");
     expect(text).toContain("guest@example.com · Seat 2 · #1042");
     expect(text).toContain("Details pending");
 
@@ -291,7 +291,7 @@ describe("RegistrationPool (admin Players card)", () => {
     };
     mount(<RegistrationPoolSummary sessionId="sess-1" />);
     const text = container.textContent ?? "";
-    expect(text).toContain("2 paid · 1 on rosters · 1 waiting");
+    expect(text).toContain("2 seats · 1 on rosters · 1 waiting");
     expect(text).toContain("Asha Mehta");
     expect(text).not.toContain("Neel");
   });

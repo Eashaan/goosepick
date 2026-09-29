@@ -19,6 +19,7 @@ interface ParticipantAuthValue {
   /** True only when a signed-in user has a profile with the minimum details. */
   isProfileComplete: boolean;
   sendMagicLink: (email: string) => Promise<{ error: string | null }>;
+  verifyEmailCode: (email: string, token: string) => Promise<{ error: string | null }>;
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -85,12 +86,22 @@ export function ParticipantAuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, [loadProfile]);
 
+  // One email carries both the 6-digit code and the legacy magic link.
   const sendMagicLink = useCallback(async (email: string) => {
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim().toLowerCase(),
       options: {
         emailRedirectTo: `${window.location.origin}${PARTICIPANT_REDIRECT_PATH}`,
       },
+    });
+    return { error: error ? error.message : null };
+  }, []);
+
+  const verifyEmailCode = useCallback(async (email: string, token: string) => {
+    const { error } = await supabase.auth.verifyOtp({
+      email: email.trim().toLowerCase(),
+      token: token.trim(),
+      type: "email",
     });
     return { error: error ? error.message : null };
   }, []);
@@ -113,10 +124,11 @@ export function ParticipantAuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       isProfileComplete: isComplete(profile),
       sendMagicLink,
+      verifyEmailCode,
       refreshProfile,
       signOut,
     }),
-    [user, session, profile, isLoading, sendMagicLink, refreshProfile, signOut],
+    [user, session, profile, isLoading, sendMagicLink, verifyEmailCode, refreshProfile, signOut],
   );
 
   return (

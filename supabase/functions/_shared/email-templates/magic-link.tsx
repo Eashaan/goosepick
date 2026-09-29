@@ -16,26 +16,35 @@ import {
 interface MagicLinkEmailProps {
   siteName: string
   confirmationUrl: string
+  token?: string
 }
 
 export const MagicLinkEmail = ({
   siteName,
   confirmationUrl,
+  token,
 }: MagicLinkEmailProps) => (
   <Html lang="en" dir="ltr">
     <Head>
       <style>{darkModeCss}</style>
     </Head>
-    <Preview>Your Goosepick access link</Preview>
+    <Preview>Your Goosepick sign-in code</Preview>
     <Body style={main}>
       <Container style={container}>
         <Text style={brand}>GOOSEPICK</Text>
-        <Heading style={h1}>Your access link</Heading>
+        <Heading style={h1}>Sign in to Goosepick</Heading>
         <Text style={text}>
           Use the secure one-time link below to open your booking, roster and
           session access on {siteName}. It expires shortly and can only be
           used once.
         </Text>
+        {token ? (
+          <>
+            <Text style={text}>Your sign-in code:</Text>
+            <Text style={code}>{token}</Text>
+            <Text style={text}>Or open it directly on this device:</Text>
+          </>
+        ) : null}
         <Button className="dm-btn" style={button} href={confirmationUrl}>
           OPEN MY GOOSEPICK
         </Button>
@@ -80,6 +89,14 @@ const button = {
   borderRadius: '8px',
   padding: '12px 20px',
   textDecoration: 'none',
+}
+const code = {
+  fontFamily: 'Courier, monospace',
+  fontSize: '28px',
+  fontWeight: 'bold' as const,
+  letterSpacing: '6px',
+  color: '#000000',
+  margin: '0 0 25px',
 }
 const footer = { fontSize: '12px', color: '#999999', margin: '30px 0 0' }
 // Rendered as a text child, which React may HTML-escape: keep this CSS free of >, &, and quotes.

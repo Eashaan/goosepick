@@ -13,6 +13,7 @@ import SetupWizard from "@/components/admin/SetupWizard";
 import SessionSummaryStrip from "@/components/admin/SessionSummaryStrip";
 import SessionLifecycleControls from "@/components/admin/SessionLifecycleControls";
 import { RegistrationPoolSummary } from "@/components/admin/RegistrationPool";
+import SeatManager from "@/components/admin/SeatManager";
 import ShopifyMappingPanel from "@/components/admin/ShopifyMappingPanel";
 
 import CourtStatusCard, { type CourtStatus } from "@/components/admin/CourtStatusCard";
@@ -379,6 +380,7 @@ const AdminDashboard = () => {
                 liveCount={liveCount}
               />
               {/* Online registrations for this session (paid seats → rosters) */}
+              <SeatManager sessionId={currentSessionId} isEnded={isEnded} />
               <RegistrationPoolSummary sessionId={currentSessionId} />
               {/* Session ↔ Shopify ticket links (live variant list, session is authoritative) */}
               <ShopifyMappingPanel

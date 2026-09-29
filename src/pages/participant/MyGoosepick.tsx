@@ -5,6 +5,7 @@ import { ChevronRight } from "lucide-react";
 import PageLayout from "@/components/layout/PageLayout";
 import GlobalHeader from "@/components/layout/GlobalHeader";
 import { Button } from "@/components/ui/button";
+import GuestTickets from "@/components/participant/GuestTickets";
 import RegistrationStateBadge from "@/components/participant/RegistrationStateBadge";
 import { useParticipantAuth } from "@/hooks/useParticipantAuth";
 import {
@@ -70,15 +71,23 @@ const MyGoosepick = () => {
     },
   });
 
-  const { upcoming, past } = useMemo(() => {
-    const all = data ?? [];
+  const { upcoming, past, guests } = useMemo(() => {
+    const everything = data ?? [];
+    // Unclaimed extra seats the purchaser bought for others (not their own booking).
+    const isGuest = (r: ExperienceRegistrationRow) =>
+      r.purchaser_profile_id === profile?.id && r.profile_id !== profile?.id && !r.profile_id;
+    const guestRows = everything
+      .filter((i) => isGuest(i.registration) && !["completed", "cancelled", "refunded"].includes(i.state))
+      .map((i) => i.registration);
+    const all = everything.filter((i) => !isGuest(i.registration));
     return {
       upcoming: all.filter(
         (item) => !["completed", "cancelled", "refunded"].includes(item.state),
       ),
       past: all.filter((item) => ["completed", "cancelled", "refunded"].includes(item.state)),
+      guests: guestRows,
     };
-  }, [data]);
+  }, [data, profile?.id]);
 
   const greetingName = profile?.first_name?.trim() || "there";
 
@@ -152,7 +161,13 @@ const MyGoosepick = () => {
                 Upcoming
               </h2>
               {upcoming.length > 0 ? (
-                <div className="space-y-3">{upcoming.map(renderCard)}</div>
+                <div className="space-y-3">
+                  {upcoming.map(renderCard)}
+                  <GuestTickets
+                    guests={guests}
+                    purchaserName={[profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || null}
+                  />
+                </div>
               ) : (
                 <div className="rounded-2xl border border-border bg-card p-6 text-center">
                   <p className="text-base font-semibold text-foreground">

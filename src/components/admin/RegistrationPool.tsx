@@ -193,7 +193,7 @@ const RegistrationPool = ({
     return <p className="text-xs text-muted-foreground">Checking online registrations...</p>;
   }
   if (isError || !data) {
-    return <p className="text-xs text-muted-foreground">Online registrations are unavailable right now.</p>;
+    return <p className="text-xs text-muted-foreground">Seats are unavailable right now.</p>;
   }
   if (data.registrations.length === 0 && attention.length === 0) return null;
 
@@ -375,12 +375,12 @@ export const RegistrationPoolSummary = ({ sessionId }: { sessionId: string | nul
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Ticket className="h-4 w-4 text-primary" />
-          <p className="text-sm font-semibold">Online registrations</p>
+          <p className="text-sm font-semibold">Seats &amp; waiting seats</p>
         </div>
         <p className="text-xs text-muted-foreground">
           {total === 0
             ? "None linked to this session yet"
-            : `${total} paid · ${onRosters} on rosters · ${waiting.length} waiting`}
+            : `${total} seats · ${onRosters} on rosters · ${waiting.length} waiting`}
         </p>
       </div>
       <TerminalRosterAttention rows={attention} />

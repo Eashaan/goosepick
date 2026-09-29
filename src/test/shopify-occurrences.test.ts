@@ -133,7 +133,7 @@ describe("occurrence endpoint source guards", () => {
 
   it("is registered with verify_jwt = false", () => {
     expect(read("supabase/config.toml")).toMatch(
-      /\[functions\.shopify-experience-occurrences\]\s*\nverify_jwt = false/,
+      /\[functions\.shopify-experience-occurrences\]\s*verify_jwt = false/,
     );
   });
 });

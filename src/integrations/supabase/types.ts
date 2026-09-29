@@ -447,10 +447,12 @@ export type Database = {
       }
       experience_registrations: {
         Row: {
+          admin_note: string | null
           cancelled_at: string | null
           claim_token_hash: string | null
           commerce_order_id: string | null
           created_at: string
+          created_by_admin: boolean
           id: string
           line_item_quantity: number | null
           line_item_title: string | null
@@ -463,9 +465,10 @@ export type Database = {
           refunded_at: string | null
           requested_session_key: string | null
           seat_index: number
+          seat_source: string
           selected_skill_level: string | null
           session_id: string | null
-          shopify_line_item_id: string
+          shopify_line_item_id: string | null
           shopify_product_id: string | null
           shopify_variant_id: string | null
           status: string
@@ -473,10 +476,12 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          admin_note?: string | null
           cancelled_at?: string | null
           claim_token_hash?: string | null
           commerce_order_id?: string | null
           created_at?: string
+          created_by_admin?: boolean
           id?: string
           line_item_quantity?: number | null
           line_item_title?: string | null
@@ -489,9 +494,10 @@ export type Database = {
           refunded_at?: string | null
           requested_session_key?: string | null
           seat_index: number
+          seat_source?: string
           selected_skill_level?: string | null
           session_id?: string | null
-          shopify_line_item_id: string
+          shopify_line_item_id?: string | null
           shopify_product_id?: string | null
           shopify_variant_id?: string | null
           status?: string
@@ -499,10 +505,12 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          admin_note?: string | null
           cancelled_at?: string | null
           claim_token_hash?: string | null
           commerce_order_id?: string | null
           created_at?: string
+          created_by_admin?: boolean
           id?: string
           line_item_quantity?: number | null
           line_item_title?: string | null
@@ -515,9 +523,10 @@ export type Database = {
           refunded_at?: string | null
           requested_session_key?: string | null
           seat_index?: number
+          seat_source?: string
           selected_skill_level?: string | null
           session_id?: string | null
-          shopify_line_item_id?: string
+          shopify_line_item_id?: string | null
           shopify_product_id?: string | null
           shopify_variant_id?: string | null
           status?: string
@@ -1494,8 +1503,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_add_manual_seat: {
+        Args: {
+          p_allow_over_capacity?: boolean
+          p_email?: string
+          p_name: string
+          p_note?: string
+          p_phone?: string
+          p_session_id: string
+          p_skill?: string
+          p_source: string
+        }
+        Returns: Json
+      }
       admin_apply_schedule_capacity: {
         Args: { p_include_overrides?: boolean; p_schedule_id: string }
+        Returns: Json
+      }
+      admin_cancel_manual_seat: {
+        Args: { p_registration_id: string }
         Returns: Json
       }
       admin_create_social_occurrence: {
@@ -1539,6 +1565,18 @@ export type Database = {
       }
       admin_unskip_recurring_date: {
         Args: { p_date: string; p_schedule_id: string }
+        Returns: Json
+      }
+      admin_update_seat: {
+        Args: {
+          p_email: string
+          p_name: string
+          p_note: string
+          p_phone: string
+          p_registration_id: string
+          p_skill: string
+          p_source?: string
+        }
         Returns: Json
       }
       admin_upsert_recurring_schedule: {
@@ -1597,6 +1635,15 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      participant_update_guest_seat: {
+        Args: {
+          p_email?: string
+          p_name: string
+          p_phone?: string
+          p_registration_id: string
+        }
+        Returns: Json
+      }
       reconcile_recurring_schedules: {
         Args: { p_schedule_id?: string }
         Returns: Json
