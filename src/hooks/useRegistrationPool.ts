@@ -27,7 +27,7 @@ export interface RegistrationPoolData {
   waiting: RegistrationPoolRow[];
 }
 
-const POOL_SELECT = `id, session_id, seat_index, status, participant_name, participant_email, profile_id, purchaser_profile_id, created_at,
+const POOL_SELECT = `id, session_id, seat_index, status, participant_name, participant_email, participant_phone, profile_id, purchaser_profile_id, created_at, seat_source, admin_note, created_by_admin,
   shopify_product_id, shopify_variant_id, line_item_title, line_item_quantity, selected_skill_level,
   profile:participant_profiles!experience_registrations_profile_id_fkey ( first_name, last_name, email ),
   purchaser:participant_profiles!experience_registrations_purchaser_profile_id_fkey ( first_name, last_name, email ),

@@ -83,20 +83,54 @@ export function isAssignableStatus(status: string | null | undefined): boolean {
 }
 
 /**
+ * Derived label for an unnamed extra seat on a multi-ticket order:
+ * "[Purchaser]'s Guest N" where N = seat_index - 1. Never persisted.
+ */
+export function guestSeatLabel(purchaserName: string | null | undefined, seatIndex: number): string {
+  const n = Math.max(1, seatIndex - 1);
+  const who = purchaserName?.trim();
+  return who ? `${who}'s Guest ${n}` : `Purchaser's Guest ${n}`;
+}
+
+/** True for an unclaimed extra seat (seat 2+) with no captured name. */
+export function isUnnamedGuestSeat(row: {
+  seat_index: number;
+  profile?: RegistrationPoolProfile | null;
+  profile_id?: string | null;
+  participant_name?: string | null;
+  seat_source?: string | null;
+}): boolean {
+  return (
+    (row.seat_source ?? "shopify") === "shopify" &&
+    row.seat_index > 1 &&
+    !row.profile_id &&
+    !joinName(row.profile?.first_name, row.profile?.last_name) &&
+    !row.participant_name?.trim()
+  );
+}
+
+/**
  * Roster name precedence: participant profile (first + optional last) →
- * participant_name captured at checkout → purchaser profile name → null
- * (admin must type one before assigning).
+ * participant_name captured at checkout/admin rename → for extra seats the
+ * derived "[Purchaser]'s Guest N" label → purchaser profile name (seat 1) → null.
  */
 export function resolveRosterName(row: {
+  seat_index?: number;
+  profile_id?: string | null;
+  seat_source?: string | null;
   profile?: RegistrationPoolProfile | null;
   participant_name?: string | null;
   purchaser?: RegistrationPoolProfile | null;
 }): string | null {
-  return (
+  const own =
     joinName(row.profile?.first_name, row.profile?.last_name) ??
-    (row.participant_name?.trim() ? row.participant_name.trim() : null) ??
-    joinName(row.purchaser?.first_name, row.purchaser?.last_name)
-  );
+    (row.participant_name?.trim() ? row.participant_name.trim() : null);
+  if (own) return own;
+  const purchaserName = joinName(row.purchaser?.first_name, row.purchaser?.last_name);
+  if (typeof row.seat_index === "number" && isUnnamedGuestSeat({ ...row, seat_index: row.seat_index })) {
+    return guestSeatLabel(purchaserName, row.seat_index);
+  }
+  return purchaserName;
 }
 
 /** Email an admin can use to resolve who a seat belongs to (never written to players). */
