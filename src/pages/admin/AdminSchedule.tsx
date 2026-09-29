@@ -54,13 +54,16 @@ const statusTone: Record<string, string> = {
 
 const AdminSchedule = () => {
   const navigate = useNavigate();
-  const { isAdmin, isLoading } = useAdminAuth();
+  const { isAdmin: isStaff, can, isLoading } = useAdminAuth();
+  // Schedules, capacities, Social creation: owner/admin only.
+  const isAdmin = isStaff && can("schedule.manage");
   const { cities, locations, setSelectedCityId, setSelectedEventId, setSelectedLocationId } =
     useEventContext();
 
   useEffect(() => {
-    if (!isLoading && !isAdmin) navigate("/admin/login");
-  }, [isLoading, isAdmin, navigate]);
+    if (!isLoading && !isStaff) navigate("/admin/login");
+    else if (!isLoading && !isAdmin) navigate("/admin", { replace: true });
+  }, [isLoading, isStaff, isAdmin, navigate]);
 
   const { data: schedules = [] } = useRecurringSchedules();
   const { data: exceptions = [] } = useScheduleExceptions();

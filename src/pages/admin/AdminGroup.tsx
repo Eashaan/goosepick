@@ -63,7 +63,7 @@ const AdminGroup = () => {
   const { groupId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { isAdmin, isLoading: authLoading } = useAdminAuth();
+  const { isAdmin, can, isLoading: authLoading } = useAdminAuth();
   const { sessionId, isEnded: sessionEnded } = useActiveSession();
 
   // Player management state
@@ -87,7 +87,8 @@ const AdminGroup = () => {
 
   useEffect(() => {
     if (!authLoading && !isAdmin) navigate("/admin/login");
-  }, [authLoading, isAdmin, navigate]);
+    else if (!authLoading && !can("event.operate")) navigate("/admin", { replace: true });
+  }, [authLoading, isAdmin, can, navigate]);
 
   // ── Fetch group ──
   const { data: group, isLoading: groupLoading } = useQuery({
