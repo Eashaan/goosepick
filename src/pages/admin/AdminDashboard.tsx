@@ -356,26 +356,31 @@ const AdminDashboard = () => {
                 <p className="text-xs text-muted-foreground">Signed in as {user.email}</p>
               )}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 text-xs"
-              onClick={() => navigate("/admin/schedule")}
-            >
-              <CalendarDays className="h-3.5 w-3.5" />
-              Schedule
-            </Button>
-            {user && <AdminManagement currentUserId={user.id} />}
+            {can("schedule.manage") && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 text-xs"
+                onClick={() => navigate("/admin/schedule")}
+              >
+                <CalendarDays className="h-3.5 w-3.5" />
+                Schedule
+              </Button>
+            )}
+            {user && can("roles.manage") && <AdminManagement currentUserId={user.id} />}
 
-            {setupCompleted && !showEditSetup && !isEnded && (
+            {canOperate && setupCompleted && !showEditSetup && !isEnded && (
               <Button variant="ghost" size="icon" onClick={() => setShowEditSetup(true)}>
                 <Settings className="h-5 w-5" />
               </Button>
             )}
           </div>
+          {!canOperate && (
+            <p className="mb-4 text-xs text-muted-foreground">Read-only access — changes are disabled for your role.</p>
+          )}
 
           {/* Session Lifecycle Controls */}
-          {setupCompleted && !showWizard && (
+          {canOperate && setupCompleted && !showWizard && (
             <div className="mb-4">
               <SessionLifecycleControls setupCompleted={setupCompleted} />
             </div>
@@ -390,21 +395,25 @@ const AdminDashboard = () => {
                 activeCount={activeCount}
                 liveCount={liveCount}
               />
-              {/* Online registrations for this session (paid seats → rosters) */}
-              <SeatManager sessionId={currentSessionId} isEnded={isEnded} />
-              <RegistrationPoolSummary sessionId={currentSessionId} />
-              {/* Session ↔ Shopify ticket links (live variant list, session is authoritative) */}
-              <ShopifyMappingPanel
-                session={activeSession}
-                isEnded={isEnded}
-                cityName={selectedCity?.name ?? null}
-                locationName={selectedLocation?.name ?? null}
-              />
+              {/* Seats for this session (owner/admin/host) */}
+              {can("seats.manage") && <SeatManager sessionId={currentSessionId} isEnded={isEnded} />}
+              {canOperate && <RegistrationPoolSummary sessionId={currentSessionId} />}
+              {/* Session ↔ Shopify ticket links — owner/admin only */}
+              {can("shopify.manage") && (
+                <ShopifyMappingPanel
+                  session={activeSession}
+                  isEnded={isEnded}
+                  cityName={selectedCity?.name ?? null}
+                  locationName={selectedLocation?.name ?? null}
+                />
+              )}
             </div>
           )}
 
 
-          {showWizard ? (
+          {showWizard && !canOperate ? (
+            <div className="py-12 text-center text-muted-foreground">This session hasn't been set up yet.</div>
+          ) : showWizard ? (
             <SetupWizard
               cityId={selectedCityId}
               eventId={selectedEventId!}
