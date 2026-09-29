@@ -1328,6 +1328,7 @@ export type Database = {
       sessions: {
         Row: {
           capacity: number | null
+          capacity_source: string | null
           city_id: string
           created_at: string
           date: string
@@ -1343,6 +1344,7 @@ export type Database = {
         }
         Insert: {
           capacity?: number | null
+          capacity_source?: string | null
           city_id: string
           created_at?: string
           date?: string
@@ -1358,6 +1360,7 @@ export type Database = {
         }
         Update: {
           capacity?: number | null
+          capacity_source?: string | null
           city_id?: string
           created_at?: string
           date?: string
@@ -1491,6 +1494,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_apply_schedule_capacity: {
+        Args: { p_include_overrides?: boolean; p_schedule_id: string }
+        Returns: Json
+      }
       admin_create_social_occurrence: {
         Args: {
           p_capacity?: number
@@ -1512,6 +1519,10 @@ export type Database = {
       }
       admin_set_recurring_schedule_active: {
         Args: { p_active: boolean; p_schedule_id: string }
+        Returns: Json
+      }
+      admin_set_schedule_default_capacity: {
+        Args: { p_capacity: number; p_schedule_id: string }
         Returns: Json
       }
       admin_set_session_capacity: {

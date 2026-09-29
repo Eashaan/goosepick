@@ -66,8 +66,16 @@ const AdminSchedule = () => {
   const { data: exceptions = [] } = useScheduleExceptions();
   const { data: thursdays = [], isLoading: thursdaysLoading } = useUpcomingSessions("thursdays");
   const { data: socials = [] } = useUpcomingSessions("social");
-  const { reconcile, setScheduleActive, skipDate, unskipDate, setCapacity, createSocial } =
-    useScheduleMutations();
+  const {
+    reconcile,
+    setScheduleActive,
+    skipDate,
+    unskipDate,
+    setCapacity,
+    setDefaultCapacity,
+    applyDefaultCapacity,
+    createSocial,
+  } = useScheduleMutations();
 
   // Locality / city names for every schedule, independent of the picked scope.
   const { data: places } = useQuery({
@@ -135,6 +143,21 @@ const AdminSchedule = () => {
   };
 
   const [capacityDrafts, setCapacityDrafts] = useState<Record<string, string>>({});
+  const [defaultDrafts, setDefaultDrafts] = useState<Record<string, string>>({});
+
+  const saveDefaultCapacity = (schedule: ScheduleRow) => {
+    const raw = (defaultDrafts[schedule.id] ?? schedule.default_capacity?.toString() ?? "").trim();
+    if (raw === "") {
+      setDefaultCapacity.mutate({ scheduleId: schedule.id, capacity: null });
+      return;
+    }
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value <= 0 || value > 10000) {
+      toast.error("Default capacity must be a whole number from 1 to 10000, or blank for no cap.");
+      return;
+    }
+    setDefaultCapacity.mutate({ scheduleId: schedule.id, capacity: value });
+  };
 
   const saveCapacity = (session: UpcomingSession) => {
     const raw = (capacityDrafts[session.id] ?? "").trim();
@@ -250,6 +273,11 @@ const AdminSchedule = () => {
             {session.capacity !== null
               ? ` · ${session.remaining} of ${session.capacity} left`
               : " · no capacity limit"}
+            {session.capacity_source === "manual"
+              ? ` · Override${schedule?.default_capacity != null ? ` (default ${schedule.default_capacity})` : ""}`
+              : session.capacity_source === "inherited"
+                ? " · Default"
+                : ""}
           </p>
         </div>
 
@@ -390,6 +418,57 @@ const AdminSchedule = () => {
                         )}
                       </Button>
                     </div>
+                  </div>
+
+                  <div className="mt-3 rounded-md border border-border p-3">
+                    <Label className="text-[11px]">Default capacity</Label>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <Input
+                        value={
+                          defaultDrafts[schedule.id] ?? (schedule.default_capacity?.toString() ?? "")
+                        }
+                        onChange={(e) =>
+                          setDefaultDrafts((prev) => ({ ...prev, [schedule.id]: e.target.value }))
+                        }
+                        placeholder="No cap"
+                        inputMode="numeric"
+                        className="h-8 w-24 text-xs"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs"
+                        disabled={setDefaultCapacity.isPending}
+                        onClick={() => saveDefaultCapacity(schedule)}
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 text-xs"
+                        disabled={applyDefaultCapacity.isPending}
+                        onClick={() => {
+                          const label =
+                            schedule.default_capacity === null
+                              ? "remove the capacity limit from"
+                              : `set capacity ${schedule.default_capacity} on`;
+                          if (
+                            window.confirm(
+                              `This will ${label} every upcoming draft date of this schedule. Dates with a manual override are left alone, and dates already booked above the cap are blocked. Continue?`,
+                            )
+                          ) {
+                            applyDefaultCapacity.mutate({ scheduleId: schedule.id });
+                          }
+                        }}
+                      >
+                        Apply to upcoming dates
+                      </Button>
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      New Thursdays inherit this capacity. Existing dates are unchanged unless you
+                      apply it. Leave blank for no cap.
+                    </p>
                   </div>
 
                   {skipped.length > 0 && (

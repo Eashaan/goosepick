@@ -65,6 +65,8 @@ export interface UpcomingSession {
   event_type: "social" | "thursdays";
   session_label: string | null;
   capacity: number | null;
+  /** 'inherited' (schedule default), 'manual' (per-date override) or null (historical). */
+  capacity_source: string | null;
   recurring_schedule_id: string | null;
   mappings: UpcomingSessionMapping[];
   /** Seats that consume capacity (cancelled / refunded excluded). */
@@ -76,8 +78,45 @@ export interface UpcomingSession {
   shopifyLinked: boolean;
 }
 
+/**
+ * Pure mirror of `admin_apply_schedule_capacity`: which future draft sessions
+ * of one schedule get the default, which are skipped, which are blocked.
+ */
+export const planScheduleCapacityApply = (
+  defaultCapacity: number | null,
+  sessions: Pick<
+    UpcomingSession,
+    "id" | "date" | "status" | "is_active" | "capacity" | "capacity_source" | "booked" | "recurring_schedule_id"
+  >[],
+  scheduleId: string,
+  today: string,
+  includeOverrides = false,
+) => {
+  const updated: string[] = [];
+  const skipped: string[] = [];
+  const conflicts: { id: string; date: string; booked: number }[] = [];
+  for (const s of sessions) {
+    if (s.recurring_schedule_id !== scheduleId) continue;
+    if (s.status !== "draft" || s.is_active || s.date < today) continue;
+    if (s.capacity_source === "manual" && !includeOverrides) {
+      skipped.push(s.id);
+      continue;
+    }
+    if (s.capacity === defaultCapacity && s.capacity_source === "inherited") {
+      skipped.push(s.id);
+      continue;
+    }
+    if (defaultCapacity !== null && s.booked > defaultCapacity) {
+      conflicts.push({ id: s.id, date: s.date, booked: s.booked });
+      continue;
+    }
+    updated.push(s.id);
+  }
+  return { updated, skipped, conflicts };
+};
+
 const SESSION_COLUMNS =
-  "id, date, status, is_active, city_id, location_id, event_type, session_label, capacity, recurring_schedule_id";
+  "id, date, status, is_active, city_id, location_id, event_type, session_label, capacity, capacity_source, recurring_schedule_id";
 
 /** Recurring schedule configs (admin RLS). */
 export function useRecurringSchedules() {
@@ -287,6 +326,52 @@ export function useScheduleMutations() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const setDefaultCapacity = useMutation({
+    mutationFn: (vars: { scheduleId: string; capacity: number | null }) =>
+      call(() =>
+        supabase.rpc("admin_set_schedule_default_capacity", {
+          p_schedule_id: vars.scheduleId,
+          p_capacity: vars.capacity as number,
+        }),
+      ),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Default capacity saved. New Thursdays will inherit it.");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const applyDefaultCapacity = useMutation({
+    mutationFn: (vars: { scheduleId: string; includeOverrides?: boolean }) =>
+      call(() =>
+        supabase.rpc("admin_apply_schedule_capacity", {
+          p_schedule_id: vars.scheduleId,
+          p_include_overrides: vars.includeOverrides ?? false,
+        }),
+      ),
+    onSuccess: (result) => {
+      invalidate();
+      const r = result as RpcResult & {
+        updated?: number;
+        skipped?: number;
+        conflicts?: { date: string; booked: number }[];
+      };
+      const conflicts = r.conflicts ?? [];
+      const summary = `${r.updated ?? 0} updated · ${r.skipped ?? 0} skipped · ${conflicts.length} blocked`;
+      if (conflicts.length > 0) {
+        toast.warning(
+          `${summary}. Already booked above the new cap: ${conflicts
+            .map((c) => `${c.date} (${c.booked} booked)`)
+            .join(", ")}`,
+          { duration: 12_000 },
+        );
+      } else {
+        toast.success(summary);
+      }
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const createSocial = useMutation({
     mutationFn: (vars: {
       cityId: string;
@@ -317,7 +402,16 @@ export function useScheduleMutations() {
     onError: (err: Error) => toast.error(err.message),
   });
 
-  return { reconcile, setScheduleActive, skipDate, unskipDate, setCapacity, createSocial };
+  return {
+    reconcile,
+    setScheduleActive,
+    skipDate,
+    unskipDate,
+    setCapacity,
+    setDefaultCapacity,
+    applyDefaultCapacity,
+    createSocial,
+  };
 }
 
 /** Pin a session so every admin screen works against exactly this date. */
