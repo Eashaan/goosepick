@@ -438,7 +438,7 @@ const AdminDashboard = () => {
                       <CourtStatusCard
                         key={item.key}
                         label={item.label}
-                        onClick={() => handleGroupClick(item)}
+                        onClick={canOperate ? () => handleGroupClick(item) : undefined}
                         isLoading={creatingGroupId === item.unitId}
                         status={status}
                       />
@@ -449,8 +449,8 @@ const AdminDashboard = () => {
                   <CourtStatusCard
                     key={item.key}
                     label={item.label}
-                    to={item.courtId ? `/admin/court/${item.courtId}` : undefined}
-                    onClick={!item.courtId ? () => handleCourtClick(item) : undefined}
+                    to={canOperate && item.courtId ? `/admin/court/${item.courtId}` : undefined}
+                    onClick={canOperate && !item.courtId ? () => handleCourtClick(item) : undefined}
                     isLoading={creatingCourtNum === item.courtNumber}
                     status={status}
                     fairnessScore={score}
