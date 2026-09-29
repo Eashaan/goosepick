@@ -10,7 +10,7 @@ describe("admin / participant routing", () => {
   it("admin login lands in the admin flow, never /my or /", () => {
     expect(adminEntryDestination("owner")).toBe("/admin");
     expect(adminEntryDestination("viewer")).toBe("/admin");
-    expect(src("src/pages/admin/AdminLogin.tsx")).toContain('navigate("/admin")');
+    expect(src("src/pages/admin/AdminLogin.tsx")).toContain('navigate("/admin", { replace: true })');
   });
   it("participant-only user cannot enter admin namespace", () => {
     expect(adminEntryDestination(null)).toBe("/admin/login");

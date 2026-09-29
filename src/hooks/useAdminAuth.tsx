@@ -14,8 +14,13 @@ interface AdminAuthState {
   can: (permission: Permission) => boolean;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  /** Sends a 6-digit staff sign-in code (same email as participant sign-in). */
+  sendCode: (email: string) => Promise<{ error: string | null }>;
+  /** Verifies the 6-digit code, then requires a staff role or signs back out. */
+  verifyCode: (email: string, token: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
+
 
 export async function fetchStaffRole(userId: string): Promise<StaffRole | null> {
   try {
@@ -81,6 +86,32 @@ export function useAdminAuth(): AdminAuthState {
     }
   }, []);
 
+  const sendCode = useCallback(async (email: string): Promise<{ error: string | null }> => {
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim().toLowerCase(),
+      options: { emailRedirectTo: `${window.location.origin}/admin/login` },
+    });
+    return { error: error ? error.message : null };
+  }, []);
+
+  const verifyCode = useCallback(async (email: string, token: string): Promise<{ error: string | null }> => {
+    const { data, error } = await supabase.auth.verifyOtp({
+      email: email.trim().toLowerCase(),
+      token: token.trim(),
+      type: "email",
+    });
+    if (error) return { error: error.message };
+    if (data.user) {
+      const r = await fetchStaffRole(data.user.id);
+      if (!r) {
+        await supabase.auth.signOut();
+        return { error: "You do not have admin access. Please contact an administrator." };
+      }
+      setRole(r);
+    }
+    return { error: null };
+  }, []);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setRole(null);
@@ -88,5 +119,6 @@ export function useAdminAuth(): AdminAuthState {
 
   const can = useCallback((p: Permission) => canRole(role, p), [role]);
 
-  return { user, session, role, isAdmin: !!role, isStaff: !!role, can, isLoading, signIn, signOut };
+  return { user, session, role, isAdmin: !!role, isStaff: !!role, can, isLoading, signIn, sendCode, verifyCode, signOut };
 }
+
