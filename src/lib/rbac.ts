@@ -58,8 +58,10 @@ export function wouldRemoveLastOwner(
   return staff.filter((s) => s.role === "owner").length <= 1;
 }
 
-/** Where the admin area should send someone. */
-export function adminEntryDestination(role: StaffRole | null, hasContext: boolean): string {
-  if (!role) return "/admin/login";
-  return hasContext ? "/admin" : "/admin/home";
+/**
+ * Where the admin area sends someone. Never "/" (that is the participant portal).
+ * /admin itself shows Admin Home when no event context is selected.
+ */
+export function adminEntryDestination(role: StaffRole | null): string {
+  return role ? "/admin" : "/admin/login";
 }
