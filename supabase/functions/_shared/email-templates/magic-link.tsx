@@ -26,16 +26,18 @@ export const MagicLinkEmail = ({
     <Head>
       <style>{darkModeCss}</style>
     </Head>
-    <Preview>Your login link for {siteName}</Preview>
+    <Preview>Your Goosepick access link</Preview>
     <Body style={main}>
       <Container style={container}>
-        <Heading style={h1}>Your login link</Heading>
+        <Text style={brand}>GOOSEPICK</Text>
+        <Heading style={h1}>Your access link</Heading>
         <Text style={text}>
-          Click the button below to log in to {siteName}. This link will expire
-          shortly.
+          Use the secure one-time link below to open your booking, roster and
+          session access on {siteName}. It expires shortly and can only be
+          used once.
         </Text>
         <Button className="dm-btn" style={button} href={confirmationUrl}>
-          Log In
+          OPEN MY GOOSEPICK
         </Button>
         <Text style={footer}>
           If you didn't request this link, you can safely ignore this email.
@@ -48,7 +50,14 @@ export const MagicLinkEmail = ({
 export default MagicLinkEmail
 
 const main = { backgroundColor: '#ffffff', fontFamily: 'Arial, sans-serif' }
-const container = { padding: '20px 25px' }
+const container = { padding: '32px 25px' }
+const brand = {
+  fontSize: '12px',
+  fontWeight: 'bold' as const,
+  letterSpacing: '4px',
+  color: '#FF4200',
+  margin: '0 0 24px',
+}
 const h1 = {
   fontSize: '22px',
   fontWeight: 'bold' as const,
@@ -64,7 +73,9 @@ const text = {
 const button = {
   backgroundColor: '#000000',
   color: '#ffffff',
-  fontSize: '14px',
+  fontSize: '13px',
+  fontWeight: 'bold' as const,
+  letterSpacing: '1px',
   border: '1px solid #000000',
   borderRadius: '8px',
   padding: '12px 20px',
