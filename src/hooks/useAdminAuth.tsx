@@ -14,8 +14,13 @@ interface AdminAuthState {
   can: (permission: Permission) => boolean;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  /** Sends a 6-digit staff sign-in code (same email as participant sign-in). */
+  sendCode: (email: string) => Promise<{ error: string | null }>;
+  /** Verifies the 6-digit code, then requires a staff role or signs back out. */
+  verifyCode: (email: string, token: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
+
 
 export async function fetchStaffRole(userId: string): Promise<StaffRole | null> {
   try {
